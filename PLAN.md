@@ -210,9 +210,43 @@ Threshold and weight tuning against **real D-Mart label images**. The current nu
 
 ---
 
-## Phase 3 — SQL Server Persistence (§26 P5)
+## Phase 3 — SQL Server Persistence (§26 P5)  ✅ DONE
 
 **Goal:** durable audit trail sufficient to diagnose any failed scan (§16).
+
+**Verified against live SQL Server.** A scan writes its row, five field rows, and ten OCR token rows in one transaction. Confirm records the operator's values with `WasEdited` derived by comparison, sets `ConfirmedAt`, and moves the scan to `CONFIRMED`. `GET` reads it all back. 196 tests pass.
+
+Full §16 audit trail confirmed present for a real scan:
+
+```text
+batchNumber        A23C91      A23C91    A23C92    edited=1
+expiryDate         06/28       2028-06   2028-06   edited=0
+lotCode            K18P2       K18P2     (null)    edited=1
+manufacturingDate  07/26       2026-07   2026-07   edited=0
+mrp                Rs. 245.00  245.00    245.00    edited=0
+                   ^raw        ^norm     ^confirmed
+```
+
+Three value columns are kept deliberately. Collapsing them would destroy the manual-correction rate of §24, which is one of the metrics the POC exists to produce.
+
+### Bug found and fixed: normalization was not idempotent
+
+`/confirm` re-normalizes what the app sends back, and the app sends back the ISO value the server produced. `normalize_date("2026-07")` re-parsed it positionally and read **2026 as the month**, so every confirmed scan picked up a spurious `month out of range` note. The stored value happened to survive via the keep-operator-input fallback, so this would have shipped as quietly corrupted audit data rather than a visible failure.
+
+Fixed with an ISO fast-path; normalization is now idempotent, and that property is under test.
+
+Also suppressed `not found` notes for fields the operator deliberately clears. Clearing a field asserts the label lacks it — information, not a validation problem — and recording it as one would pollute the audit trail of every legitimately short pack.
+
+### Persistence failure policy
+
+Deliberately asymmetric:
+
+| Endpoint | On database failure |
+| --- | --- |
+| `POST /scans` | Returns results with `persisted: false`. Several seconds of OCR the operator already waited for are not discarded because a write failed. |
+| `POST /scans/{id}/confirm` | **500.** This is the commit point; reporting success without storing the confirmation is the worst outcome available (§22). |
+
+Validation problems never block a confirm. The operator is the final authority (§4); refusing their input would leave them unable to record a genuinely odd label. Problems are recorded against the field instead.
 
 **Deliverables**
 - `sql/schema.sql` — `SkuScan`, `SkuScanField`, `SkuScanOcr`, optional `SkuMaster` (§15). Single database; no separate OCR store

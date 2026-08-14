@@ -12,15 +12,24 @@ from __future__ import annotations
 import logging
 
 from app.config import Settings, get_settings
+from app.db import repositories
 from app.db.connection import next_scan_code
+from app.db.repositories import PersistenceError
 from app.models.response_models import (
     BoundingBox,
+    ConfirmScanResponse,
     ExtractedField,
     OcrTokenModel,
     ProcessingStatus,
     ScanResponse,
 )
-from app.services import confidence, field_extractor, image_service, validator
+from app.services import (
+    confidence,
+    field_extractor,
+    image_service,
+    normalizer,
+    validator,
+)
 from app.services.ocr_service import OcrToken, get_ocr_service
 from app.utils.logging import StageTimer
 
@@ -103,6 +112,32 @@ def process_scan(
         ProcessingStatus.COMPLETED if tokens else ProcessingStatus.NO_TEXT_DETECTED
     )
 
+    # Persist best-effort. A database outage must not throw away several
+    # seconds of OCR the operator already waited for — the results are still
+    # usable and the response says whether they were stored. The commit point
+    # that genuinely requires the database is /confirm, which does fail hard.
+    persisted = True
+    try:
+        repositories.save_scan(
+            scan_id=repositories.new_scan_id(),
+            scan_code=scan_code,
+            status=status,
+            fields=fields,
+            tokens=tokens,
+            image_path=str(image_path),
+            overall_confidence=overall_confidence,
+            variant_used=variant_used,
+            device_id=device_id,
+            device_model=device_model,
+            processing_ms=timings.get("totalMs"),
+        )
+    except PersistenceError as exc:
+        persisted = False
+        logger.error(
+            "Scan could not be persisted; results returned unsaved",
+            extra={**log_context, "error": str(exc)},
+        )
+
     logger.info(
         "Scan finished",
         extra={
@@ -112,6 +147,7 @@ def process_scan(
             "variantUsed": variant_used,
             "imagePath": str(image_path),
             "overallConfidence": overall_confidence,
+            "persisted": persisted,
             "fieldsFound": [k for k, v in fields.items() if v.value is not None],
             "fieldsMissing": [k for k, v in fields.items() if v.value is None],
             **quality,
@@ -127,12 +163,110 @@ def process_scan(
         tokens=[_to_model(t) for t in tokens],
         timings=timings,
         variantUsed=variant_used,
+        persisted=persisted,
         message=(
             None
             if tokens
             else "No text was detected. Ask the operator to recapture the label."
         ),
     )
+
+
+def confirm_scan(
+    scan_code: str, confirmed: dict[str, str | None]
+) -> ConfirmScanResponse:
+    """Validate and persist the operator's confirmed values.
+
+    The server re-validates rather than trusting the device (section 13). A
+    validation problem does not block the commit: the operator is the final
+    authority (section 4), and refusing their input would leave them unable to
+    record a genuinely odd label. The problems are recorded against the fields
+    so the audit trail shows what was accepted despite a warning.
+    """
+    specs = {spec.name: spec for spec in field_extractor.load_field_specs()}
+    types = {name: spec.value_type for name, spec in specs.items()}
+
+    normalized: dict[str, str | None] = {}
+    notes: dict[str, list[str]] = {}
+
+    for name, raw in confirmed.items():
+        if raw is None or not str(raw).strip():
+            normalized[name] = None
+            continue
+
+        spec = specs.get(name)
+        if spec is None:
+            # Unknown field names are kept verbatim rather than dropped; the
+            # alias table is meant to grow, and silently discarding operator
+            # input would be worse than storing something unrecognized.
+            normalized[name] = str(raw).strip()
+            notes.setdefault(name, []).append("unknown field, stored as entered")
+            continue
+
+        result = normalizer.normalize(str(raw), spec.value_type, spec.date_precision)
+        if result.ok:
+            normalized[name] = result.value
+        else:
+            # Keep what the operator typed. Losing their correction because it
+            # failed a format rule would be the worst possible outcome.
+            normalized[name] = str(raw).strip()
+            notes.setdefault(name, []).extend(result.notes or ["could not normalize"])
+
+    validation = validator.validate(normalized, types)
+    for name, problems in validation.field_notes.items():
+        if name not in normalized:
+            continue
+        # "not found" describes a failed extraction. When the operator
+        # deliberately clears a field they are asserting it is absent from the
+        # label, which is information rather than a problem — recording it as
+        # one would pollute the audit trail on every legitimately short pack.
+        if normalized[name] is None:
+            problems = [p for p in problems if p != "not found"]
+        if problems:
+            notes.setdefault(name, []).extend(problems)
+
+    flat_notes = {name: "; ".join(problems)[:500] for name, problems in notes.items()}
+
+    scan_id = repositories.confirm_scan(scan_code, normalized, flat_notes)
+
+    logger.info(
+        "Scan confirmed",
+        extra={
+            "scanId": scan_code,
+            "scanRowId": scan_id,
+            "editedFields": sorted(normalized),
+            "validationNotes": flat_notes,
+        },
+    )
+
+    return ConfirmScanResponse(
+        scanId=scan_code,
+        status=ProcessingStatus.CONFIRMED,
+        persisted=True,
+        validationNotes=notes,
+        qrPayload=build_qr_payload(scan_code, normalized),
+    )
+
+
+def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
+    """Build the QR payload for the printed label (section 17).
+
+    Pipe-delimited and uppercase so ZPL can encode it in alphanumeric mode,
+    which packs two characters per 11 bits. Mixed case or symbols would force
+    byte mode and roughly halve capacity against the 10mm budget.
+
+    Empty fields keep their position so the payload stays positional and a
+    scanner-side parser does not have to guess which field is missing.
+    """
+    ordered = [
+        scan_code,
+        values.get("batchNumber") or "",
+        values.get("manufacturingDate") or "",
+        values.get("expiryDate") or "",
+        values.get("lotCode") or "",
+        values.get("mrp") or "",
+    ]
+    return "|".join(part.upper() for part in ordered)
 
 
 def extract_and_score(

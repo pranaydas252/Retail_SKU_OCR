@@ -50,6 +50,10 @@ _MONTH_NAMES = {
 # scope, so a pivot window would add ambiguity without buying anything.
 _CENTURY = 2000
 
+# Output format of this module, recognized on input so normalization is
+# idempotent.
+_ISO_INPUT = re.compile(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$")
+
 
 @dataclass
 class NormalizedValue:
@@ -131,6 +135,25 @@ def normalize_date(raw: str, precision: str = "month") -> NormalizedValue:
         return NormalizedValue(None, notes=["empty"])
 
     text = raw.strip().upper()
+
+    # Already-normalized input passes straight through. Normalization must be
+    # idempotent because /confirm re-normalizes what the app sends back, and
+    # the app sends back the ISO value the server produced. Without this,
+    # "2026-07" is re-parsed as month 2026 and every confirmed scan picks up a
+    # spurious "month out of range" note in its audit trail.
+    already_iso = _ISO_INPUT.match(text)
+    if already_iso:
+        year = int(already_iso.group(1))
+        month = int(already_iso.group(2))
+        day = int(already_iso.group(3)) if already_iso.group(3) else None
+
+        if not 1 <= month <= 12:
+            return NormalizedValue(None, notes=["month out of range"])
+        if day is not None:
+            if not _valid_day(year, month, day):
+                return NormalizedValue(None, notes=["invalid calendar date"])
+            return NormalizedValue(f"{year:04d}-{month:02d}-{day:02d}")
+        return NormalizedValue(f"{year:04d}-{month:02d}")
 
     # Strip a leading label fragment the extractor may have carried along.
     text = re.sub(r"^(MFG|MFD|EXP|EXPIRY|PKD|PACKED|USE BEFORE|BEST BEFORE)[.:\s]*", "", text)

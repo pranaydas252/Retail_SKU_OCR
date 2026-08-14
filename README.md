@@ -97,11 +97,30 @@ Or with curl:
 curl -F "image=@sample_data/good/synthetic_label.jpg" http://localhost:8000/api/v1/scans
 ```
 
+Confirm a scan and read it back:
+
+```powershell
+curl -X POST -H "Content-Type: application/json" `
+  -d '{\"fields\":{\"batchNumber\":\"A23C91\",\"mrp\":\"245.00\"}}' `
+  http://localhost:8000/api/v1/scans/SCAN-000001/confirm
+
+curl http://localhost:8000/api/v1/scans/SCAN-000001
+```
+
 Tests:
 
 ```powershell
 python -m pytest tests -q
 ```
+
+## API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/health` | Liveness and OCR readiness. Unauthenticated so IIS can probe it. |
+| `POST` | `/api/v1/scans` | Upload a label image; returns extracted fields, tokens, and timings. |
+| `POST` | `/api/v1/scans/{scanId}/confirm` | Persist operator-confirmed values; returns the QR payload. |
+| `GET` | `/api/v1/scans/{scanId}` | Read a stored scan back, including operator edits. |
 
 ## Status
 
@@ -110,7 +129,7 @@ python -m pytest tests -q
 | 0 — Repo skeleton, config contract | Done |
 | 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
 | 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
-| 3 — SQL Server persistence | Schema applied; repositories pending |
+| 3 — SQL Server persistence, confirm/fetch endpoints | Done |
 | 4 — Android app | Not started |
 | 5 — ZQ320 printing | Not started |
 | 6 — IIS deployment | Not started |

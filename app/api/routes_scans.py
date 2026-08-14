@@ -7,7 +7,14 @@ import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.api.security import require_api_key
-from app.models.response_models import ScanResponse
+from app.db import repositories
+from app.db.repositories import PersistenceError
+from app.models.request_models import ConfirmScanRequest
+from app.models.response_models import (
+    ConfirmScanResponse,
+    ScanResponse,
+    StoredScanResponse,
+)
 from app.services import scan_service
 from app.services.image_service import ImageValidationError
 
@@ -60,3 +67,87 @@ def create_scan(
                 "message": "The image could not be processed. Please try again.",
             },
         ) from exc
+
+
+@router.post(
+    "/scans/{scan_code}/confirm",
+    response_model=ConfirmScanResponse,
+    response_model_by_alias=True,
+)
+def confirm_scan(scan_code: str, body: ConfirmScanRequest) -> ConfirmScanResponse:
+    """Persist the operator-confirmed values for a scan.
+
+    This is the commit point, so unlike the scan upload a database failure is
+    fatal here — reporting success without storing the operator's confirmation
+    would be the worst outcome available (CLAUDE.md section 22).
+    """
+    try:
+        return scan_service.confirm_scan(scan_code, body.fields)
+    except PersistenceError as exc:
+        message = str(exc)
+        if "Unknown scan" in message:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "status": "ERROR",
+                    "code": "SCAN_NOT_FOUND",
+                    "message": f"No scan found with id {scan_code}.",
+                },
+            ) from exc
+
+        logger.exception("Confirm failed", extra={"scanId": scan_code})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "ERROR",
+                "code": "PERSISTENCE_FAILED",
+                "message": "The confirmation could not be saved. Please retry.",
+            },
+        ) from exc
+
+
+@router.get(
+    "/scans/{scan_code}",
+    response_model=StoredScanResponse,
+    response_model_by_alias=True,
+)
+def get_scan(scan_code: str) -> StoredScanResponse:
+    """Read a stored scan back, including the operator's edits."""
+    try:
+        stored = repositories.get_scan(scan_code)
+    except PersistenceError as exc:
+        logger.exception("Scan lookup failed", extra={"scanId": scan_code})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "ERROR",
+                "code": "PERSISTENCE_FAILED",
+                "message": "The scan could not be read. Please retry.",
+            },
+        ) from exc
+
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "status": "ERROR",
+                "code": "SCAN_NOT_FOUND",
+                "message": f"No scan found with id {scan_code}.",
+            },
+        )
+
+    return StoredScanResponse(
+        scanId=stored.scan_code,
+        status=stored.status,
+        overallConfidence=stored.overall_confidence,
+        imagePath=stored.image_path,
+        variantUsed=stored.variant_used,
+        deviceId=stored.device_id,
+        deviceModel=stored.device_model,
+        processingMs=stored.processing_ms,
+        failureReason=stored.failure_reason,
+        createdAt=stored.created_at,
+        confirmedAt=stored.confirmed_at,
+        printedAt=stored.printed_at,
+        fields=stored.fields,
+    )
