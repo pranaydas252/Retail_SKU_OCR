@@ -3,16 +3,25 @@
     <string name="app_name">SKU Scan</string>
 
     <!-- Main -->
-    <string name="main_eyebrow">Retail SKU OCR</string>
     <string name="main_title">Scan a product label</string>
     <string name="main_subtitle">Point the camera at the printed label. Batch, dates, lot and MRP are read automatically, then you confirm them.</string>
     <string name="main_scan_button">Open camera</string>
-    <string name="main_device_ready">Zebra device verified</string>
-    <string name="main_device_debug">Debug build — device check bypassed</string>
     <string name="main_server_checking">Checking server…</string>
     <string name="main_server_ready">Server ready</string>
     <string name="main_server_unreachable">Server unreachable</string>
     <string name="main_server_preparing">Server preparing OCR models…</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Configuration</string>
+    <string name="settings_server_hint">Server address</string>
+    <string name="settings_server_help">Host and port of the OCR server, for example 192.168.1.50:8000</string>
+    <string name="settings_server_error">Enter a valid address, e.g. 192.168.1.50:8000</string>
+    <string name="settings_printer_hint">Printer Bluetooth MAC</string>
+    <string name="settings_printer_help">ZQ320 address in the form AC:3F:A4:11:22:33. Leave empty until a printer is paired.</string>
+    <string name="settings_printer_error">Enter a MAC like AC:3F:A4:11:22:33</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="cd_settings">Configuration</string>
 
     <!-- Unsupported device -->
     <string name="unsupported_title">Unsupported device</string>

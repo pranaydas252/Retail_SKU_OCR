@@ -2,8 +2,8 @@ pluginManagement {
     repositories {
         google {
             content {
-                includeGroupByRegex("com\.android.*")
-                includeGroupByRegex("com\.google.*")
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
                 includeGroupByRegex("androidx.*")
             }
         }
@@ -21,13 +21,12 @@ dependencyResolutionManagement {
         // Zebra's Maven repository, for the EMDK and Link-OS SDKs.
         //
         // Declared but not yet depended on. The EMDK artifact is compileOnly
-        // and the ZSDK AAR is vendored into app/libs, so the build does not
-        // currently reach out to Zebra. See CLAUDE.md sections 4 and 18.
+        // and the ZSDK AAR will be vendored into app/libs, so the build does
+        // not currently reach out to Zebra. See CLAUDE.md sections 4 and 18.
         maven {
             url = uri("https://zebratech.jfrog.io/artifactory/EMDK-Android/")
             content { includeGroup("com.symbol") }
         }
-        flatDir { dirs("app/libs") }
     }
 }
 

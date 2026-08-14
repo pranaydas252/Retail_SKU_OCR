@@ -34,37 +34,64 @@
         android:id="@+id/serverChip"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="24dp"
+        android:layout_marginEnd="8dp"
         android:background="@drawable/bg_chip_neutral"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:orientation="horizontal"
         android:paddingHorizontal="12dp"
         android:paddingVertical="7dp"
         app:layout_constraintBottom_toBottomOf="@id/logo"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/logo">
+        app:layout_constraintEnd_toStartOf="@id/settingsButton"
+        app:layout_constraintTop_toTopOf="@id/logo"
+        android:baselineAligned="false">
 
         <View
             android:id="@+id/serverDot"
             android:layout_width="7dp"
             android:layout_height="7dp"
+            android:layout_gravity="center_vertical"
             android:layout_marginEnd="7dp"
-            android:background="@drawable/bg_chip_neutral"
-            tools:ignore="UselessLeaf" />
+            android:background="@drawable/bg_dot" />
 
         <TextView
             android:id="@+id/serverStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
             android:text="@string/main_server_checking"
             android:textAppearance="@style/TextAppearance.DmartOcr.BandChip"
             android:textColor="@color/text_secondary" />
     </LinearLayout>
 
+    <FrameLayout
+        android:id="@+id/settingsButton"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginEnd="24dp"
+        android:background="@drawable/bg_icon_button"
+        android:clickable="true"
+        android:contentDescription="@string/cd_settings"
+        android:focusable="true"
+        app:layout_constraintBottom_toBottomOf="@id/logo"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/logo">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_settings"
+            app:tint="@color/text_secondary" />
+    </FrameLayout>
+
     <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"
+        android:fillViewport="true"
         android:paddingBottom="16dp"
         app:layout_constraintBottom_toTopOf="@id/bottomBar"
         app:layout_constraintEnd_toEndOf="parent"
@@ -74,22 +101,14 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:paddingHorizontal="24dp"
-            android:paddingTop="36dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/main_eyebrow"
-                android:textAppearance="@style/TextAppearance.DmartOcr.Label"
-                android:textColor="@color/brand_cyan" />
+            android:paddingTop="20dp">
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
                 android:text="@string/main_title"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Display" />
 
@@ -102,10 +121,15 @@
 
             <!-- Hero. A schematic label rather than a photo: it doubles as an
                  instruction for what the ROI window should end up containing. -->
+            <!-- Absorbs whatever vertical space is left, with fillViewport on
+                 the scroll view above. Fixed heights leave a gap on a tall
+                 screen and clip on a short one. -->
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="220dp"
-                android:layout_marginTop="28dp"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="4dp"
                 android:background="@drawable/bg_hero">
 
                 <LinearLayout
@@ -143,36 +167,6 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- Device gate state. Present so a technician can see at a glance
-                 which build is installed without opening logs. -->
-            <LinearLayout
-                android:id="@+id/deviceChip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:background="@drawable/bg_chip_high"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="9dp">
-
-                <ImageView
-                    android:id="@+id/deviceIcon"
-                    android:layout_width="14dp"
-                    android:layout_height="14dp"
-                    android:layout_marginEnd="8dp"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_check"
-                    app:tint="@color/band_high" />
-
-                <TextView
-                    android:id="@+id/deviceStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/main_device_ready"
-                    android:textAppearance="@style/TextAppearance.DmartOcr.BandChip"
-                    android:textColor="@color/band_high" />
-            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
@@ -186,10 +180,19 @@
         android:paddingBottom="24dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
+        <!--
+            Symmetric zero padding with gravity=center is what actually centres
+            an icon-plus-text MaterialButton. The default style carries 16dp
+            start/end padding, and with an icon present that shifts the whole
+            group off-centre.
+        -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/scanButton"
             android:layout_width="match_parent"
             android:layout_height="60dp"
+            android:gravity="center"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
             android:text="@string/main_scan_button"
             app:backgroundTint="@color/brand_cyan"
             app:cornerRadius="18dp"

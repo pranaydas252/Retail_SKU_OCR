@@ -4,6 +4,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.markss.dmartocr.BuildConfig
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -60,6 +61,7 @@ object ApiClient {
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor(baseUrlInterceptor())
             .addInterceptor(apiKeyInterceptor())
             .apply {
                 if (BuildConfig.DEBUG) {
@@ -77,11 +79,36 @@ object ApiClient {
 
     val api: ScanApi by lazy {
         Retrofit.Builder()
+            // Placeholder. Retrofit fixes its base URL at build time, so the
+            // real host is substituted per request by baseUrlInterceptor from
+            // whatever the operator configured in settings.
             .baseUrl(BuildConfig.BACKEND_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(ScanApi::class.java)
+    }
+
+    /**
+     * Rewrites each request onto the currently configured server.
+     *
+     * Retrofit cannot change its base URL after construction, and rebuilding
+     * the client whenever settings change would leak connection pools and race
+     * with in-flight calls. Swapping scheme, host and port per request keeps
+     * one client and makes a settings change take effect immediately.
+     */
+    private fun baseUrlInterceptor() = Interceptor { chain ->
+        val configured = AppPreferences.serverUrl.toHttpUrlOrNull()
+            ?: return@Interceptor chain.proceed(chain.request())
+
+        val original = chain.request()
+        val rewritten = original.url.newBuilder()
+            .scheme(configured.scheme)
+            .host(configured.host)
+            .port(configured.port)
+            .build()
+
+        chain.proceed(original.newBuilder().url(rewritten).build())
     }
 
     /** Attaches the API key when one is configured (CLAUDE.md section 19). */

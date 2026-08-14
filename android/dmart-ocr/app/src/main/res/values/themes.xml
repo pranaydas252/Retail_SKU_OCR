@@ -24,6 +24,7 @@
         <item name="colorSurfaceVariant">@color/surface_sunken</item>
         <item name="colorOnSurfaceVariant">@color/text_secondary</item>
         <item name="colorOutline">@color/outline</item>
+        <item name="elevationOverlayEnabled">false</item>
         <item name="colorOutlineVariant">@color/outline</item>
 
         <item name="colorError">@color/band_low</item>
@@ -44,6 +45,40 @@
         <item name="textAppearanceLabelSmall">@style/TextAppearance.DmartOcr.Label</item>
 
         <item name="materialButtonStyle">@style/Widget.DmartOcr.Button</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.DmartOcr.Dialog</item>
+    </style>
+
+    <!--
+        Material 3 tints dialog surfaces with colorPrimary by default, which
+        against our cyan produced a lilac panel that belongs to no part of the
+        brand. Every surface token is pinned to plain white instead.
+    -->
+    <style name="ThemeOverlay.DmartOcr.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceContainer">@color/surface</item>
+        <item name="colorSurfaceContainerHigh">@color/surface</item>
+        <item name="colorSurfaceContainerHighest">@color/surface</item>
+        <item name="android:colorBackground">@color/surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorPrimary">@color/brand_cyan</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="fontFamily">@font/google_sans</item>
+
+        <item name="materialAlertDialogTitleTextStyle">
+            @style/TextAppearance.DmartOcr.DialogTitle
+        </item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.DmartOcr.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.DmartOcr.DialogButton</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.DmartOcr.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.DmartOcr.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
     </style>
 
     <!-- The camera screen is the one dark surface in the app: a light chrome

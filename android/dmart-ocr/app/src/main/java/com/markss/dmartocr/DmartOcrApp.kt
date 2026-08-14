@@ -2,11 +2,13 @@ package com.markss.dmartocr
 
 import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
+import com.markss.dmartocr.data.AppPreferences
 
 class DmartOcrApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppPreferences.init(this)
         // Light theme only, by requirement. Pinned here rather than left to the
         // system so a device set to dark mode cannot restyle the confidence
         // bands, which carry safety meaning on the confirmation screen.

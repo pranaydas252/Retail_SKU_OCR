@@ -3,7 +3,7 @@ package com.markss.dmartocr.ui
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -203,7 +203,7 @@ class ResultActivity : AppCompatActivity() {
                 },
                 onFailure = { error ->
                     setBusy(false)
-                    AlertDialog.Builder(this@ResultActivity)
+                    MaterialAlertDialogBuilder(this@ResultActivity)
                         .setMessage(error.message ?: getString(R.string.error_network))
                         .setPositiveButton(R.string.error_retry, null)
                         .show()
@@ -247,8 +247,13 @@ class ResultActivity : AppCompatActivity() {
             "mrp",
         )
 
-        fun encode(response: ScanResponse): String = json.encodeToString(response)
+        // Serializers passed explicitly: inside a companion object the bare
+        // call resolves to the member overload that expects a
+        // SerializationStrategy rather than the reified extension.
+        fun encode(response: ScanResponse): String =
+            json.encodeToString(ScanResponse.serializer(), response)
 
-        fun decode(payload: String): ScanResponse = json.decodeFromString(payload)
+        fun decode(payload: String): ScanResponse =
+            json.decodeFromString(ScanResponse.serializer(), payload)
     }
 }

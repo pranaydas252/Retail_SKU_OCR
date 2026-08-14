@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Explicit dialog surface. Material 3 derives its dialog background from an
+     elevation overlay tinted by colorPrimary, which turned the panel cyan.
+     Setting the drawable directly removes the ambiguity entirely. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/surface" />
+    <corners android:radius="24dp" />
+</shape>

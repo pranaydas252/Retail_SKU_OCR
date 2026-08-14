@@ -3,7 +3,7 @@ package com.markss.dmartocr.ui
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -32,6 +32,14 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.settingsButton.setOnClickListener {
+            SettingsDialog.show(this) {
+                // Re-probe immediately: the operator changed the address
+                // precisely because they think the old one was wrong.
+                checkServer()
+            }
+        }
+
         binding.scanButton.setOnClickListener {
             if (deviceAllowed) {
                 startActivity(Intent(this, ScanActivity::class.java))
@@ -47,50 +55,21 @@ class MainActivity : AppCompatActivity() {
         checkServer()
     }
 
+    /**
+     * The gate has no chip on screen. A verified device is the normal case and
+     * does not need announcing; a blocked one gets a modal that stops the flow,
+     * which is the only outcome the operator can act on. The decision is
+     * logged either way for a technician.
+     */
     private fun applyDeviceGate() {
-        when (val result = ZebraGate.check(this)) {
-            is ZebraGate.Result.Allowed -> {
-                deviceAllowed = true
-                setDeviceChip(
-                    text = getString(R.string.main_device_ready),
-                    color = R.color.band_high,
-                    container = R.drawable.bg_chip_high,
-                    icon = R.drawable.ic_check,
-                )
-            }
+        val result = ZebraGate.check(this)
+        deviceAllowed = result !is ZebraGate.Result.Blocked
 
-            is ZebraGate.Result.Bypassed -> {
-                deviceAllowed = true
-                setDeviceChip(
-                    text = getString(R.string.main_device_debug),
-                    color = R.color.band_review,
-                    container = R.drawable.bg_chip_review,
-                    icon = R.drawable.ic_info,
-                )
-            }
-
-            is ZebraGate.Result.Blocked -> {
-                deviceAllowed = false
-                setDeviceChip(
-                    text = getString(R.string.unsupported_title),
-                    color = R.color.band_low,
-                    container = R.drawable.bg_chip_low,
-                    icon = R.drawable.ic_alert,
-                )
-                showUnsupportedDeviceDialog(result.device)
-            }
+        if (result is ZebraGate.Result.Blocked) {
+            showUnsupportedDeviceDialog(result.device)
         }
 
         binding.scanButton.isEnabled = deviceAllowed
-    }
-
-    private fun setDeviceChip(text: String, color: Int, container: Int, icon: Int) {
-        binding.deviceStatus.text = text
-        binding.deviceStatus.setTextColor(ContextCompat.getColor(this, color))
-        binding.deviceChip.setBackgroundResource(container)
-        binding.deviceIcon.setImageResource(icon)
-        binding.deviceIcon.imageTintList =
-            ContextCompat.getColorStateList(this, color)
     }
 
     /**
@@ -135,7 +114,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showUnsupportedDeviceDialog(device: String? = null) {
         val detail = device?.let { "\n\n" + getString(R.string.unsupported_detail, it) } ?: ""
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.unsupported_title)
             .setMessage(getString(R.string.unsupported_body) + detail)
             .setPositiveButton(R.string.unsupported_close, null)

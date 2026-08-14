@@ -13,12 +13,18 @@
     <!--
         Android 11+ package visibility.
 
-        Without this the PackageManager lookup for the EMDK runtime returns
-        "not found" on EVERY device, including genuine Zebra hardware, so the
-        device gate rejects everything and it looks like a hardware fault.
-        See CLAUDE.md section 4 and PLAN.md R11.
+        Every package ZebraGate looks up must be listed here. Without this the
+        PackageManager lookup returns "not found" on EVERY device, including
+        genuine Zebra hardware, so the device gate rejects everything and it
+        looks like a hardware fault. See CLAUDE.md section 4 and PLAN.md R11.
+
+        EMDK is listed but NOT required: verified against a real TC22 on
+        Android 14, the EMDK runtime is not preinstalled. MX (com.symbol.mxmf)
+        is the reliable platform indicator.
     -->
     <queries>
+        <package android:name="com.symbol.mxmf" />
+        <package android:name="com.symbol.datawedge" />
         <package android:name="com.symbol.emdk.emdkservice" />
     </queries>
 

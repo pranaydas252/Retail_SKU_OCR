@@ -14,7 +14,7 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -298,7 +298,7 @@ class ScanActivity : AppCompatActivity() {
     private fun failed(message: String) {
         showProcessing(false)
         capturing = false
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setMessage(message)
             .setPositiveButton(R.string.error_retry, null)
             .show()
@@ -309,7 +309,7 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun showPermissionDialog() {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(R.string.scan_permission_title)
             .setMessage(R.string.scan_permission_body)
             .setPositiveButton(R.string.scan_permission_settings) { _, _ ->
@@ -327,7 +327,7 @@ class ScanActivity : AppCompatActivity() {
     }
 
     private fun toastAndFinish(message: String) {
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setMessage(message)
             .setPositiveButton(R.string.scan_close) { _, _ -> finish() }
             .show()
