@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Palette derived from the Markss Infotech mark: near-black ink and a single
+    bright cyan. The cyan is the only saturated colour in the interface, so it
+    reads as "this is the action" everywhere it appears. Everything structural
+    is a cool grey tuned to sit under it without competing.
+
+    Light theme only, by requirement. There is no values-night variant, and one
+    should not be added without redoing the contrast pass.
+-->
+<resources>
+
+    <!-- Brand, sampled from assets/marks_info_logo.png -->
+    <color name="brand_cyan">#00A7E8</color>
+    <color name="brand_cyan_pressed">#0090C9</color>
+    <color name="brand_cyan_container">#E2F5FD</color>
+    <color name="brand_ink">#0F1010</color>
+
+    <!-- Surfaces. The background is a hair cooler than the cards so elevation
+         reads without needing heavy shadows. -->
+    <color name="background">#F4F7F9</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_sunken">#EEF3F6</color>
+    <color name="outline">#DDE5EA</color>
+    <color name="outline_strong">#C3D0D8</color>
+
+    <!-- Text -->
+    <color name="text_primary">#0F1010</color>
+    <color name="text_secondary">#5A6B76</color>
+    <color name="text_tertiary">#8A99A3</color>
+    <color name="text_on_brand">#FFFFFF</color>
+
+    <!-- Confidence bands (CLAUDE.md §12). Deliberately distinguishable by
+         more than hue: each band also carries its own icon and label text, so
+         the interface does not depend on colour vision alone. -->
+    <color name="band_high">#0E8A4F</color>
+    <color name="band_high_container">#E3F5EB</color>
+    <color name="band_review">#B26A00</color>
+    <color name="band_review_container">#FDF1DC</color>
+    <color name="band_low">#C5321F</color>
+    <color name="band_low_container">#FCE9E6</color>
+
+    <!-- Camera overlay -->
+    <color name="scrim">#A6000000</color>
+    <color name="roi_stroke">#00A7E8</color>
+
+    <color name="ripple_on_brand">#33FFFFFF</color>
+
+</resources>

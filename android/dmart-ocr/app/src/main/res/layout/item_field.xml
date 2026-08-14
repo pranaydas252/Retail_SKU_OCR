@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One editable field on the confirmation screen.
+
+    The confidence band is communicated three ways at once - a coloured left
+    rail, a labelled chip, and the chip text itself - so the signal survives
+    colour blindness, glare on a warehouse floor, and a scratched screen. §12
+    treats a wrongly accepted value as the serious failure, so this is worth
+    the redundancy.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_field"
+    android:orientation="horizontal"
+    android:paddingEnd="16dp"
+    tools:ignore="RtlSymmetry">
+
+    <!-- Confidence rail -->
+    <View
+        android:id="@+id/bandRail"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:background="@color/band_high" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/fieldLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="@style/TextAppearance.DmartOcr.Label"
+                tools:text="BATCH NUMBER" />
+
+            <TextView
+                android:id="@+id/bandChip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip_high"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:textAppearance="@style/TextAppearance.DmartOcr.BandChip"
+                android:textColor="@color/band_high"
+                tools:text="CLEAR" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/fieldValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@null"
+            android:hint="@string/result_not_found"
+            android:importantForAutofill="no"
+            android:inputType="textCapCharacters"
+            android:maxLines="1"
+            android:minHeight="40dp"
+            android:paddingVertical="4dp"
+            android:textAppearance="@style/TextAppearance.DmartOcr.Value"
+            android:textColorHint="@color/text_tertiary"
+            tools:text="A23C91" />
+
+        <!-- Explains WHY a value is uncertain. A band with no reason just tells
+             the operator to worry; this tells them what to look at. -->
+        <TextView
+            android:id="@+id/fieldNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.DmartOcr.Body"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="Calculated from the manufacturing date"
+            tools:visibility="visible" />
+
+    </LinearLayout>
+
+</LinearLayout>

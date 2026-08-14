@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One schematic "label line" in the home screen hero: a short grey bar for a
+    printed field name, a longer cyan bar for its value. Repeated four times it
+    reads as a product label without pretending to be a real one.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="7dp">
+
+    <View
+        android:layout_width="46dp"
+        android:layout_height="7dp"
+        android:background="@drawable/bg_bar_muted" />
+
+    <View
+        android:layout_width="14dp"
+        android:layout_height="1dp" />
+
+    <View
+        android:layout_width="76dp"
+        android:layout_height="7dp"
+        android:background="@drawable/bg_bar_brand" />
+
+</LinearLayout>

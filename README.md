@@ -36,7 +36,7 @@ The **backend lives at the repository root**. The Android project lives in `andr
 | Layer | Choice |
 | --- | --- |
 | Device | Zebra TC22 **only** — EMDK device gate; CameraX for capture; no DataWedge |
-| App | Kotlin, Jetpack Compose |
+| App | Kotlin + XML views, Material 3, light theme only — **no Compose** |
 | Transport | HTTPS REST, multipart image upload |
 | Server | Python 3.12, FastAPI, Uvicorn behind IIS |
 | Preprocessing | OpenCV |
@@ -130,7 +130,7 @@ python -m pytest tests -q
 | 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
 | 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
 | 3 — SQL Server persistence, confirm/fetch endpoints | Done |
-| 4 — Android app | Not started |
+| 4 — Android app (Kotlin + XML) | Code complete; not yet compiled or run on device |
 | 5 — ZQ320 printing | Not started |
 | 6 — IIS deployment | Not started |
 

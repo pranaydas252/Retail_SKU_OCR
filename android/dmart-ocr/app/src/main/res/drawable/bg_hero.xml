@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A very soft cyan wash behind the hero illustration. Keeps the top of the
+     home screen from reading as an empty white slab without introducing a
+     second saturated colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="270"
+        android:startColor="#F0FAFE"
+        android:endColor="#FFFFFF" />
+    <corners android:radius="28dp" />
+    <stroke android:width="1dp" android:color="@color/outline" />
+</shape>

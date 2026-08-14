@@ -264,9 +264,35 @@ Validation problems never block a confirm. The operator is the final authority (
 
 ---
 
-## Phase 4 — Android App (§26 P6)
+## Phase 4 — Android App (§26 P6)  ⚠️ WRITTEN, NOT COMPILED
 
 **Goal:** the operator workflow of §4, running on real hardware.
+
+**Status: code complete, build not run.** The user opted to run it directly on a TC22 rather than build locally, so **nothing here has been through a compiler.** Static cross-checks were done instead — every resource reference, every `R.*` usage, and every ViewBinding field verified against the layouts, plus a non-ASCII sweep after two Cyrillic characters were found in a method name. That catches whole classes of error but is not a compiler. **Expect build errors on first `assembleDebug`.**
+
+Stack: Kotlin + XML views, **no Compose**, light theme only, Material 3.
+
+### Three runtime bugs fixed by reading, since no compiler ran
+
+- **`ViewPort` built from a zero-width preview.** `ProcessCameraProvider`'s listener can fire before `PreviewView` is laid out, and `Rational(0, 0)` throws. Camera binding is now deferred via `previewView.post` with a re-post guard.
+- **View geometry read from a background thread.** `cropToRoi` ran on the capture executor and reached into `RoiOverlayView` for the ROI rect. The rect is now read on the main thread and passed into the callback.
+- **`Build.SERIAL` for the device id.** Deprecated, and on API 26+ returns the literal string `"unknown"` without `READ_PHONE_STATE` — which would have put a permission prompt in front of the operator to obtain nothing. Replaced with `Settings.Secure.ANDROID_ID`, which needs no permission and is stable per install.
+
+### Screens
+
+Three, not two. `MainActivity` and `ScanActivity` are the two the user asked for; `ResultActivity` is the confirm/edit step, which §27 requires before anything is committed — the flow cannot end at the camera. There is no login, onboarding, or settings screen.
+
+### Design
+
+Palette derived from the Markss mark: ink `#0F1010`, cyan `#00A7E8` sampled from the logo. Cyan is the only saturated colour, so it reads as the action everywhere. Google Sans (OFL, verified before bundling) at 400/500/700, subset to Latin plus `₹` — **168 KB, down from 5.7 MB**.
+
+Dynamic colour deliberately off: confidence bands carry safety meaning and must not be retinted by wallpaper. Each band is signalled three ways — coloured rail, chip background, chip text — so it survives colour blindness and warehouse glare. Fields are sorted **worst-confidence-first**, so the values most likely to be wrong are never below the fold.
+
+### Verification still required on a TC22
+
+- R14, the ROI coordinate mapping. The `ViewPort` approach is correct in principle; it has not been seen working on device.
+- Device gate against genuine Zebra hardware, especially that the `<queries>` element does its job (R11).
+- End-to-end scan → confirm against the live backend.
 
 **Deliverables** — `android/dmart-ocr/`
 - Kotlin, Gradle wrapper, AGP 8.x + JDK 17, Compose. `targetSdk 35`, `minSdk` set to the TC22's actual API level (see Open Decisions Q1)
