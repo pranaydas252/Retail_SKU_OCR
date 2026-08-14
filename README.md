@@ -60,6 +60,12 @@ copy .env.example .env
 # edit .env — at minimum SQL_CONNECTION_STRING and API_KEY
 ```
 
+Create the database (SQL Server must be running):
+
+```powershell
+sqlcmd -S localhost\SQLEXPRESS -E -i sql\schema.sql
+```
+
 Warm the OCR models before first use. PaddleOCR downloads them on first run; do this ahead of any demo:
 
 ```powershell
@@ -78,11 +84,38 @@ Health check:
 curl http://localhost:8000/api/v1/health
 ```
 
-Test the OCR pipeline without a device:
+Test the OCR pipeline without a device. `--make-sample` renders a synthetic label so the wiring can be checked before real images exist:
 
 ```powershell
-curl -F "image=@sample_data/good/sku_001.jpg" http://localhost:8000/api/v1/scans
+python scripts\test_client.py --make-sample
+python scripts\test_client.py sample_data\good\synthetic_label.jpg
 ```
+
+Or with curl:
+
+```powershell
+curl -F "image=@sample_data/good/synthetic_label.jpg" http://localhost:8000/api/v1/scans
+```
+
+Tests:
+
+```powershell
+python -m pytest tests -q
+```
+
+## Status
+
+| Phase | State |
+| --- | --- |
+| 0 — Repo skeleton, config contract | Done |
+| 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
+| 2 — Field extraction, normalization, validation, confidence | Next |
+| 3 — SQL Server persistence | Schema applied; repositories pending |
+| 4 — Android app | Not started |
+| 5 — ZQ320 printing | Not started |
+| 6 — IIS deployment | Not started |
+
+Measured on the reference machine: a 10-region label completes in ~4.0 s end to end. Latency scales with the **number of detected text regions**, not image size. See `PLAN.md` section 1c.
 
 ---
 

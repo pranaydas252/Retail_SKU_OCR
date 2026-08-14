@@ -177,11 +177,13 @@ release -> ENFORCE_ZEBRA_ONLY = true
 
 Without this, no development or testing is possible on any machine until a TC22 is physically available. The debug bypass must log a loud warning and must never be enabled in a release build.
 
-#### Server-side enforcement
+#### Enforcement boundary
 
-The client gate is **user experience, not security**. `Build.MANUFACTURER` is spoofable on a rooted device.
+The gate is **client-side only**. There is no server-side device allowlist.
 
-The real restriction is server-side: the Android app sends its device model and serial with every scan request, and the backend rejects any device that is not on the allowed Zebra device list. Treat the client check as a fast, friendly failure and the server check as the actual control.
+This is a deliberate, accepted decision. The check is a runtime check, so the APK can still be installed on non-Zebra hardware and `Build.MANUFACTURER` is spoofable on a rooted device. Neither matters here: the app is useless off a TC22 because the scan flow refuses to start, and the deployment is a controlled store estate rather than a public distribution.
+
+Do not add server-side device validation unless the user asks for it.
 
 ### Camera workflow
 
@@ -1241,38 +1243,17 @@ Example:
 }
 ```
 
-### Public datasets
+### Zero-shot evaluation
 
-Public datasets are scaffolding used until real D-Mart label images exist. They are **not** a substitute for the accuracy gate.
+**Do not curate or download public datasets for this build.**
 
-Combine them at the **harness** level, not on disk. Each source keeps its own directory and its own licence; a shared adapter converts each into the ground-truth schema above, and the accuracy report breaks results down by source.
+PaddleOCR is used zero-shot: no fine-tuning, no training data, no dataset engineering. Point the pipeline at real D-Mart label images and measure what it does out of the box.
 
-Do not merge sources into one undifferentiated image pool. They sit at different pipeline layers:
+Rationale: PP-OCRv5 is already a strong general recognizer. The project's variable is the **extraction and normalization logic layered on top of it**, not the OCR model itself. Building a dataset pipeline before knowing where PaddleOCR actually fails would be effort spent on the wrong layer.
 
-| Layer | Source | Tests |
-| --- | --- | --- |
-| End-to-end | ExpDate real product photos | Detection, recognition, spatial association, normalization |
-| Unit | Cropped digit datasets | Recognizer and normalizer only, including `O/0 I/1 S/5 B/8 G/6 Z/2` disambiguation |
+Consequence, accepted: until real D-Mart images exist, there is no accuracy gate to run. Phase 2 logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. The `sample_data/` bucket structure and ground-truth format stay in place, ready to be filled.
 
-Rules:
-
-- **Real images only in the accuracy gate.** Synthetic images may be used for stress-testing the normalizer, but must never be mixed into the reported accuracy number — synthetic data inflates it.
-- **Report per source and per bucket.** A single blended figure hides which conditions fail.
-- **Do not redistribute.** Several public sets state no licence, which grants no rights. Local R&D evaluation only. Downloaded data stays git-ignored.
-
-### Known coverage gaps
-
-Public data does not cover the full field set. This is why real D-Mart images remain mandatory:
-
-| Field | Public coverage |
-| --- | --- |
-| `expiryDate` | Good |
-| `manufacturingDate` | Good |
-| `batchNumber` | Partial — usually annotated as a generic code, not distinguished from lot |
-| `lotCode` | Partial — same problem |
-| `mrp` | **None.** No public dataset covers Indian MRP printing |
-
-There is also a domain gap: public expiry datasets are dominated by inkjet and dot-matrix date stamps on packaging, whereas D-Mart SKU labels are printed label stock. The failure modes differ. Treat public results as a smoke test of the logic, not a prediction of field performance.
+If zero-shot recognition turns out to be the bottleneck — rather than extraction — revisit this decision and record the pivot per section 1.
 
 ---
 

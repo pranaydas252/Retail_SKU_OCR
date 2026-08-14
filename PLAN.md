@@ -37,16 +37,15 @@ Section references below (§n) point at CLAUDE.md sections.
 | --- | --- | --- | --- | --- | --- |
 | R1 | PaddleOCR **3.x** API differs from the 2.x style implied by common examples | Silent breakage / rewrite | **Confirmed by introspection** — see §1a below. Paddle imports confined to `ocr_service.py`; everything downstream eats our own `OcrToken(text, bbox, confidence)` | 1 | Characterized |
 | R2 | First PaddleOCR run downloads models from the network | Slow first scan / air-gapped failure | **Accepted by user.** Models pre-initialized before demo. `scripts/warmup_models.py` + startup warmup inference + Android "preparing OCR" state. Model dir configurable, vendored to `models/` for deploy | 1 / 6 | Resolved |
-| R3 | No real D-Mart label images yet | Phase 2 accuracy gate is unverifiable | Build against ExpDate (1,767 real product photos, date/prod/code annotated) + Kaggle sets — see [sample_data/README.md](sample_data/README.md). Real-image run is a **separate second gate** | 2 | Mitigated |
+| R3 | No real D-Mart label images yet, and **public datasets are dropped** — PaddleOCR is used zero-shot | No accuracy gate can run until images arrive | **Accepted.** Extraction logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. `sample_data/` structure stays ready | 2 | Accepted |
 | R4 | Indian retail labels often carry Devanagari/regional script alongside English | Junk tokens, bad spatial association | Start `lang="en"`; evaluate multilingual only if real images demand it. Log unrecognized-script rate | 2 | Open |
 | R5 | TC22 not yet connected | Camera/printer assumptions untested | Develop on SM-S711B; TC22 arriving. See R10 — the Zebra-only gate must not block this | 4 | Open |
 | R10 | **Zebra-only device gate blocks all development** until a TC22 physically arrives | Phase 4 stalls entirely | Gate driven by a build-config flag: `debug → ENFORCE_ZEBRA_ONLY=false`, `release → true`. Debug bypass logs a loud warning and is never enabled in release | 4 | Mitigated by design |
 | R11 | EMDK `PackageManager` check silently fails on **every** device, Zebra included, if the Android 11+ `<queries>` element is missing | Gate rejects genuine TC22s; looks like a hardware fault | Manifest must declare `<queries><package android:name="com.symbol.emdk.emdkservice" /></queries>`. Add a test that asserts its presence | 4 | Known |
-| R12 | Client device check is spoofable on a rooted device | Restriction is cosmetic | Client gate = UX. **Server-side device allowlist is the actual control** — app sends model + serial, backend rejects non-Zebra | 3 / 4 | Design decided |
-| R13 | Public datasets cover ~2.5 of 5 fields — **no MRP data at all**, batch/lot not distinguished, and the print domain differs (inkjet date stamps vs printed label stock) | False confidence from a good public score | Report accuracy per source and per bucket, never blended. Real D-Mart images stay the gate | 2 | Quantified |
+| R12 | Client device check is spoofable; APK installs on non-Zebra hardware | Restriction is advisory, not enforced | **Accepted by user, no server-side allowlist.** The app is useless off a TC22 because the scan flow refuses to start, and distribution is a controlled store estate. Do not add server-side device validation unless asked | 4 | Accepted |
 | R6 | ZQ320 needs Zebra ZSDK (Link-OS AAR, not on Maven Central) | Build blocked | Obtain SDK during Phase 3 so it is in hand before Phase 5. Vendor to `android/dmart-ocr/app/libs/` (git-ignored) | 5 | Open |
 | R7 | Self-signed HTTPS cert rejected by TC22 | End-to-end blocked at the last step | Decide cert strategy before Phase 6; if self-signed, plan Android network-security-config + device trust store install | 6 | Open |
-| R8 | CPU-only OCR latency. PP-OCRv5 published CPU times: mobile ~1.75 s/image, server ~4.34 s/image, before OpenCV preprocessing and multi-variant runs | Poor operator UX | Measure in Phase 1. Model combination is config-driven so it can be tuned, not rewritten. Only if p95 is bad, add the optional WebSocket (§14) — **no queue** | 1 → 7 | Quantified |
+| R8 | CPU-only OCR latency **scales with detected region count, not image size** — measured 1.6 s for a 2-region image but **3.9–4.1 s for a 10-region label**. Real SKU labels carry far more text (ingredients, addresses, barcodes, statutory text) and could plausibly hit 30–60 regions | Poor operator UX; possibly unusable | Partly addressed (see §1c). **The dominant remaining lever is cutting region count: crop to the on-screen target rectangle before upload** so OCR never sees non-label text. That is a Phase 4 change. Only if p95 is still bad, add the optional WebSocket (§14) — **no queue** | 1 → 4 → 7 | Measured, partly mitigated |
 | R9 | QR must fit 10 mm × 10 mm **and** carry all confirmed fields | Unscannable label | Budget computed — see §1b. Fits with headroom. Enforce a payload-length check before emitting ZPL | 5 | Resolved |
 
 ### 1a. PaddleOCR 3.4.1 API — verified by introspection
@@ -62,14 +61,48 @@ Confirmed on the dev machine, not assumed:
 
 **Version decision: keep `paddleocr==3.4.1` / `paddlepaddle==3.3.1`.** The 3.x line is the line that ships PP-OCRv5. Downgrading to 2.x would lose PP-OCRv5 entirely.
 
-**Model decision (highest ROI): `PP-OCRv5_server_det` + `PP-OCRv5_mobile_rec`.**
+**Model decision: `PP-OCRv5_mobile_det` + `PP-OCRv5_mobile_rec`.**
 
-| Variant | Det acc | Rec acc | CPU s/image |
+Originally planned as `server_det + mobile_rec` from published benchmarks. **Measured on this machine, that was wrong:**
+
+| Detection model | Median warm latency | Text output | Scores |
 | --- | --- | --- | --- |
-| mobile + mobile | 0.770 | 0.8015 | ~1.75 |
-| server + server | 0.827 | 0.8401 | ~4.34 |
+| `PP-OCRv5_mobile_det` | **1.60 s** | correct | 0.954 / 0.962 |
+| `PP-OCRv5_server_det` | 12.23 s | identical | 0.934 / 0.990 |
 
-Detection quality dominates on small dense label print; recognition targets are short alphanumeric fields where the cheaper model gives up little. Both names are config-driven so all four combinations are A/B testable in Phase 2 without a code change.
+Published figures implied a ~2.5× gap; the real gap here is **7.6×**, and server detection bought nothing on this input. 10.6 extra seconds per scan is not a defensible trade for an operator workflow.
+
+Caveat, stated honestly: the test image was clean synthetic text — the easy case. Server detection's advantage should appear on glare, blur, and small dense print, which is exactly what cannot be measured until real D-Mart labels exist. Both model names stay config-driven, and this decision is re-opened at the Phase 2 accuracy gate.
+
+**Runtime blocker found and fixed.** PaddlePaddle 3.3.1 on Windows CPU crashes during text detection:
+
+```text
+NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute
+not support [pir::ArrayAttribute<pir::DoubleAttribute>]
+(at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
+```
+
+This is a bug in Paddle's oneDNN backend, not in our code. Workaround: `enable_mkldnn=False`, exposed as `OCR_ENABLE_MKLDNN`. Detection is entirely non-functional without it — this would have blocked Phase 1 completely.
+
+**Also noted:** PaddleOCR ignores `lang` and `ocr_version` when explicit model names are given, and warns. We pass model names only, so neither is sent — passing them would imply a control that does not exist.
+
+### 1c. Latency findings (Phase 1, measured)
+
+Reference image: 900 × 640 synthetic label, 10 detected text regions, `mobile_det` + `mobile_rec`, oneDNN off.
+
+| Change | Median `ocrMs` |
+| --- | --- |
+| Starting point | 5.0 – 6.9 s |
+| `text_recognition_batch_size` 6 → **1** | 6.05 s → **3.94 s** standalone |
+| Scan endpoint `async def` → **`def`** | → **3.9 – 4.1 s** through the server |
+
+Two findings behind those numbers:
+
+**Recognition batch size 1 is fastest on CPU**, against intuition. Batched recognition pads every crop to the widest in the batch, and label text varies wildly in width, so larger batches mostly process padding. Verified with construction order reversed to rule out cache-ordering effects: batch 1 = 3.94 s, batch 6 = 6.05 s, batch 16 = 6.43 s.
+
+**The scan endpoint was declared `async def` while calling blocking OCR**, which pinned several seconds of CPU work to the event loop. That both inflated latency by 1–3 s and made the whole server unresponsive during a scan. Declaring it `def` lets FastAPI run it in a threadpool. After the fix, `/health` answers in **49 ms** while a scan is in flight.
+
+**Latency scales with region count, not image size.** 2 regions ≈ 1.6 s, 10 regions ≈ 4.0 s. This is the number that matters for R8, and it is why cropping to the target rectangle on-device is the main remaining lever.
 
 ### 1b. QR density budget — 10 mm × 10 mm
 
@@ -110,9 +143,13 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 
 ---
 
-## Phase 1 — Backend OCR Spine (§26 P1 + P2)
+## Phase 1 — Backend OCR Spine (§26 P1 + P2)  ✅ DONE
 
 **Goal:** image in → OCR tokens with bounding boxes out. This is the load-bearing phase; the rest is logic on top of it.
+
+**Verified end to end.** `POST /api/v1/scans` on a synthetic label returns 10 tokens with bounding boxes, all correctly read at 0.95–0.999 confidence, in ~4.0 s. Labels and values come back as *separate* tokens — which is exactly what Phase 2 spatial association needs. Error paths confirmed: unreadable image → 400 `UNREADABLE_IMAGE`, undersized → 400 `IMAGE_TOO_SMALL`, blank image → 200 `NO_TEXT_DETECTED` with a recapture message. 37 tests pass.
+
+Database schema is also applied ahead of Phase 3: `SkuScan`, `SkuScanField`, `SkuScanOcr`, `SkuMaster`, and the `SeqScanCode` sequence exist in `DmartOcr` on `MSSQL$SQLEXPRESS`. Phase 1 uses the sequence for scan codes; row persistence still belongs to Phase 3.
 
 **Deliverables**
 - `api/routes_health.py`, `api/routes_scans.py`
@@ -146,7 +183,7 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 - `services/confidence.py` (§12) — weighted blend of OCR confidence, label-match quality, spatial quality, format validity, cross-field consistency, cross-variant agreement. Bands: `≥0.95 HIGH` / `0.80–0.95 REVIEW` / `<0.80 LOW`. Documented as engineering defaults, **not calibrated probabilities**
 - `NO_TEXT_DETECTED` status path (§22) — a valid result, not a 500
 - `sample_data/expected.json` ground truth + `tests/test_accuracy.py` producing the **field-level** accuracy table of §24 (per-field accuracy, false accepts, false rejects, no-detection rate, manual-correction rate, mean processing time)
-- **Dataset adapters** — one per public source, each emitting the common ground-truth schema. Two test layers: ExpDate *real* photos drive end-to-end accuracy; digit crops drive recognizer/normalizer unit tests. Report is broken down **per source and per bucket, never blended**. Synthetic splits excluded from the accuracy gate. See [sample_data/README.md](sample_data/README.md) and R13
+- **No dataset work.** PaddleOCR is used zero-shot. Extraction, normalization, and validation are unit-tested against hand-written OCR token fixtures, so the logic is fully testable before any image exists. The accuracy harness reads `sample_data/*/expected.json` and reports per bucket — it simply has nothing to score until real D-Mart images arrive
 - Unit tests for date parsing and field extraction (explicitly required by §28)
 
 **Exit gate:** §30 first-runnable-milestone complete end-to-end on the server, plus a printed accuracy report over `sample_data/`. **Second gate, once real D-Mart images arrive (R3): re-run and tune thresholds.**
@@ -167,7 +204,6 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 - `services/scan_service.py` — orchestrates preprocess → OCR → extract → validate → persist
 - `POST /api/v1/scans/{scanId}/confirm` (§13) — server re-validates operator edits before persisting
 - `GET /api/v1/scans/{scanId}` (§13)
-- **Server-side device allowlist (R12)** — every scan request carries device model + serial; the backend rejects anything not on the allowed Zebra list. This is the real enforcement of the Zebra-only rule; the client gate is only UX. Allowlist is config-driven, not hard-coded
 - DB failure → server error with the scan's processing state left diagnosable (§22)
 
 **Exit gate:** scan → confirm → rows present in `SkuScan` / `SkuScanField` / `SkuScanOcr`, verified via `sqlcmd`; every item in §16 is recoverable for a given scanId.
@@ -284,7 +320,9 @@ Redis · RabbitMQ · Celery · Kafka · PostgreSQL · vector DBs · LLMs · VLMs
 
 | # | Question | Resolution |
 | --- | --- | --- |
-| Q1 | EMDK / DataWedge needed? | **Revised 2026-08-14.** Originally "no". Now: the app must run **only on Zebra hardware**, so EMDK is used for **device gating only** — never for capture, which stays CameraX. DataWedge still unused. Enforcement is client gate (UX) + server-side device allowlist (actual control). CLAUDE.md §4 rewritten. |
+| Q1 | EMDK / DataWedge needed? | **Revised 2026-08-14.** Originally "no". Now: the app must run **only on Zebra hardware**, so EMDK is used for **device gating only** — never for capture, which stays CameraX. DataWedge still unused. **Client-side gate only, no server-side allowlist** — accepted trade-off, see R12. CLAUDE.md §4 rewritten. |
+| Q2c | Public datasets | **Dropped 2026-08-14.** PaddleOCR used zero-shot. No fine-tuning, no dataset curation. The project's variable is the extraction layer, not the OCR model. Revisit only if zero-shot recognition turns out to be the bottleneck. |
+| Q3 | SQL Server target | **Local `MSSQL$SQLEXPRESS`, Windows auth.** Verified reachable: SQL Server 2022 (RTM) 16.0.1000.6 Express. Schema applied directly. |
 | Q2a | Repo layout | **Backend at repository root**, Android in `android/`. CLAUDE.md §5 and §29 updated to match. |
 | Q2b | Model download on first run | **Accepted.** Progress state in app + `scripts/warmup_models.py` + startup warmup. Models pre-initialized before any demo. |
 | Q4a | QR specification | **10 mm × 10 mm**, carries all confirmed OCR fields, ZPL `^BQ`, Zebra ZSDK over Bluetooth. CLAUDE.md §17 and §18 rewritten. |
@@ -296,14 +334,12 @@ Blocking phase noted. None block Phase 0–2.
 
 | # | Question | Blocks |
 | --- | --- | --- |
-| Q2 | Real D-Mart SKU label images — how many, when? English-only or mixed script? (R3, R4) | P2 second gate |
-| Q3 | Target SQL Server: keep local `SQLEXPRESS` for dev, or a designated instance + auth mode (SQL auth vs Windows auth)? | P3 |
+| Q2 | Real D-Mart SKU label images — how many, when? English-only or mixed script? (R3, R4) | P2 accuracy gate |
 | Q4 | Zebra ZSDK access, and is a ZQ320 available for testing? | P5 |
-| Q5 | POC auth mechanism — static API key header is the simplest option satisfying §19. Confirm, or name the required scheme. | P1 |
 | Q6 | HTTPS certificate — corporate CA or self-signed? Self-signed means installing trust on every TC22. | P6 |
 | Q7 | Is D-Mart product master data (`SkuMaster`, §15) available, or is that table deferred? | P3 |
 
-**Proposed defaults if unanswered:** Q3 → local `SQLEXPRESS` + Windows auth; Q5 → static API key header; Q7 → create the table, leave it empty.
+**Defaults applied where unanswered:** Q5 → static API key header (§19 satisfied, isolated from business logic); Q7 → table created, left empty.
 
 ---
 
