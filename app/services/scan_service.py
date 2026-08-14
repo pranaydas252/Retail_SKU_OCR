@@ -15,15 +15,27 @@ from app.config import Settings, get_settings
 from app.db.connection import next_scan_code
 from app.models.response_models import (
     BoundingBox,
+    ExtractedField,
     OcrTokenModel,
     ProcessingStatus,
     ScanResponse,
 )
-from app.services import image_service
+from app.services import confidence, field_extractor, image_service, validator
 from app.services.ocr_service import OcrToken, get_ocr_service
 from app.utils.logging import StageTimer
 
 logger = logging.getLogger(__name__)
+
+# Fields that must be present for a scan to be considered fully successful.
+# Overall confidence is the minimum across these, so a missing or uncertain
+# expiry date cannot be averaged away by four good fields.
+REQUIRED_FIELDS = [
+    "batchNumber",
+    "manufacturingDate",
+    "expiryDate",
+    "lotCode",
+    "mrp",
+]
 
 
 def process_scan(
@@ -79,6 +91,13 @@ def process_scan(
                 extra={**log_context, "variant": variant},
             )
 
+    fields: dict[str, ExtractedField] = {}
+    overall_confidence: float | None = None
+
+    if tokens:
+        with timer.stage("extractMs"):
+            fields, overall_confidence = extract_and_score(tokens)
+
     timings = timer.as_dict()
     status = (
         ProcessingStatus.COMPLETED if tokens else ProcessingStatus.NO_TEXT_DETECTED
@@ -92,6 +111,9 @@ def process_scan(
             "tokenCount": len(tokens),
             "variantUsed": variant_used,
             "imagePath": str(image_path),
+            "overallConfidence": overall_confidence,
+            "fieldsFound": [k for k, v in fields.items() if v.value is not None],
+            "fieldsMissing": [k for k, v in fields.items() if v.value is None],
             **quality,
             **timings,
         },
@@ -100,8 +122,8 @@ def process_scan(
     return ScanResponse(
         scanId=scan_code,
         status=status,
-        overallConfidence=_mean_confidence(tokens),
-        fields={},  # Phase 2
+        overallConfidence=overall_confidence,
+        fields=fields,
         tokens=[_to_model(t) for t in tokens],
         timings=timings,
         variantUsed=variant_used,
@@ -113,17 +135,61 @@ def process_scan(
     )
 
 
-def _mean_confidence(tokens: list[OcrToken]) -> float | None:
-    """Mean OCR confidence.
+def extract_and_score(
+    tokens: list[OcrToken],
+) -> tuple[dict[str, ExtractedField], float | None]:
+    """Extract, validate, and score fields from OCR tokens.
 
-    This is a raw OCR average and NOT the application confidence score of
-    CLAUDE.md section 12, which needs extracted fields to combine label-match,
-    spatial, format, and cross-field signals. It is reported in Phase 1 only
-    so the pipeline has something observable, and is replaced in Phase 2.
+    Every required field appears in the result, including ones that were not
+    found — those carry a null value so the Android UI can render an explicit
+    empty box for the operator rather than silently omitting the field
+    (CLAUDE.md section 11).
     """
-    if not tokens:
-        return None
-    return round(sum(t.confidence for t in tokens) / len(tokens), 4)
+    candidates = field_extractor.extract_fields(tokens)
+    specs = {spec.name: spec for spec in field_extractor.load_field_specs()}
+
+    values = {
+        name: (candidates[name].normalized.value if name in candidates else None)
+        for name in specs
+    }
+    types = {name: spec.value_type for name, spec in specs.items()}
+
+    validation = validator.validate(values, types)
+
+    fields: dict[str, ExtractedField] = {}
+    scores: dict[str, float] = {}
+    found: set[str] = set()
+
+    for name in specs:
+        candidate = candidates.get(name)
+
+        if candidate is None or not candidate.normalized.ok:
+            fields[name] = ExtractedField(
+                value=None,
+                confidence=0.0,
+                band=confidence.band(0.0),
+                source="NOT_FOUND",
+            )
+            scores[name] = 0.0
+            continue
+
+        score = confidence.score_field(
+            candidate,
+            format_ok=validation.is_valid(name),
+            consistency_ok=validation.consistency_ok,
+        )
+        scores[name] = score
+        found.add(name)
+
+        fields[name] = ExtractedField(
+            value=candidate.normalized.value,
+            confidence=score,
+            band=confidence.band(score),
+            source="DERIVED_RULE" if candidate.strategy == "derived" else "OCR_RULES",
+            rawValue=candidate.raw_value,
+        )
+
+    return fields, confidence.overall(scores, found)
 
 
 def _to_model(token: OcrToken) -> OcrTokenModel:

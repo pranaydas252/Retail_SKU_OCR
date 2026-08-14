@@ -1,0 +1,92 @@
+# Field label aliases and value formats.
+#
+# CLAUDE.md section 8: these are starting rules, kept configurable and easy to
+# extend. Add aliases here, never in code.
+#
+# Matching is case-insensitive and ignores punctuation and spacing, so "B.NO."
+# "b no" and "BNO" all collapse to the same key. Longer aliases are tried
+# first, so "BATCH NO" wins over "BATCH" on the same token.
+#
+# value_type drives both normalization and the plausibility gate that stops a
+# label from grabbing an implausible neighbour:
+#   date      -> must parse as a date
+#   currency  -> must contain a number
+#   code      -> must be alphanumeric, and must not itself look like a label
+
+fields:
+  batchNumber:
+    value_type: code
+    aliases:
+      - BATCH NUMBER
+      - BATCH NO.
+      - BATCH NO
+      - BATCH
+      - B.NO.
+      - B.NO
+      - BNO
+      - BN
+
+  manufacturingDate:
+    value_type: date
+    date_precision: month   # month/year is the common printing on SKU labels
+    aliases:
+      - MANUFACTURING DATE
+      - MANUFACTURED ON
+      - MANUFACTURING
+      - MANUFACTURED
+      - MFG DATE
+      - MFD DATE
+      - MFG.DATE
+      - PACKED ON
+      - PACKED
+      - MFG
+      - MFD
+      - PKD
+
+  expiryDate:
+    value_type: date
+    date_precision: month
+    aliases:
+      - EXPIRY DATE
+      - EXPIRY
+      - EXP DATE
+      - EXPIRES ON
+      - EXPIRES
+      - USE BEFORE
+      - BEST BEFORE
+      - USE BY
+      - EXP
+
+  lotCode:
+    value_type: code
+    aliases:
+      - LOT NUMBER
+      - LOT CODE
+      - LOT NO.
+      - LOT NO
+      - LOT
+
+  mrp:
+    value_type: currency
+    aliases:
+      - MAXIMUM RETAIL PRICE
+      - MAX RETAIL PRICE
+      - M.R.P.
+      - M.R.P
+      - MRP
+
+# Confidence weighting (CLAUDE.md section 12).
+#
+# These are engineering defaults, not calibrated probabilities. They must be
+# tuned against real D-Mart label images before anyone treats the number as
+# meaningful. Weights are normalized at load, so they need not sum to 1.
+confidence_weights:
+  ocr: 0.40           # recognition confidence of the value token
+  label_match: 0.20   # exact alias hit vs. a looser match
+  spatial: 0.20       # same-line beats below; near beats far
+  format: 0.15        # value normalized cleanly for its type
+  consistency: 0.05   # cross-field agreement, e.g. mfg < exp
+
+# Penalty applied to a date resolved under an assumed convention rather than
+# an unambiguous one. See normalizer.py.
+ambiguous_date_penalty: 0.25

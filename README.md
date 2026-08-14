@@ -109,7 +109,7 @@ python -m pytest tests -q
 | --- | --- |
 | 0 — Repo skeleton, config contract | Done |
 | 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
-| 2 — Field extraction, normalization, validation, confidence | Next |
+| 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
 | 3 — SQL Server persistence | Schema applied; repositories pending |
 | 4 — Android app | Not started |
 | 5 — ZQ320 printing | Not started |

@@ -126,14 +126,29 @@ class TestCreateScan:
     def test_missing_file_returns_422(self, client):
         assert client.post("/api/v1/scans").status_code == 422
 
-    def test_fields_are_empty_until_phase_2(self, client, monkeypatch):
-        stub_tokens(monkeypatch, [OcrToken("MRP 245.00", 10, 10, 100, 20, 0.9)])
+    def test_extracted_fields_are_returned(self, client, monkeypatch):
+        stub_tokens(monkeypatch, [OcrToken("MRP Rs. 245.00", 10, 10, 300, 20, 0.9)])
 
         body = client.post(
             "/api/v1/scans", files={"image": ("l.jpg", jpeg(), "image/jpeg")}
         ).json()
 
-        assert body["fields"] == {}
+        assert body["fields"]["mrp"]["value"] == "245.00"
+        assert body["fields"]["mrp"]["band"] in {"HIGH", "REVIEW", "LOW"}
+        assert body["fields"]["mrp"]["source"] == "OCR_RULES"
+
+    def test_missing_fields_are_present_with_null_values(self, client, monkeypatch):
+        # The UI must render an explicit empty box, not silently omit the
+        # field (CLAUDE.md section 11).
+        stub_tokens(monkeypatch, [OcrToken("MRP Rs. 245.00", 10, 10, 300, 20, 0.9)])
+
+        fields = client.post(
+            "/api/v1/scans", files={"image": ("l.jpg", jpeg(), "image/jpeg")}
+        ).json()["fields"]
+
+        assert fields["batchNumber"]["value"] is None
+        assert fields["batchNumber"]["source"] == "NOT_FOUND"
+        assert {"batchNumber", "manufacturingDate", "expiryDate", "lotCode", "mrp"} <= set(fields)
 
     def test_timings_are_reported(self, client, monkeypatch):
         stub_tokens(monkeypatch, [OcrToken("X", 0, 0, 10, 10, 0.9)])

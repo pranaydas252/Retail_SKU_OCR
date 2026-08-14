@@ -185,13 +185,33 @@ This is a deliberate, accepted decision. The check is a runtime check, so the AP
 
 Do not add server-side device validation unless the user asks for it.
 
+### Region of interest — automatic, never a manual crop
+
+The scan screen shows a fixed **ROI window** overlaid on the camera preview, with instruction text above it:
+
+```text
+Place the desired section inside this window
+```
+
+The app crops the captured frame to that window and uploads **only the cropped region**.
+
+Rules:
+
+- **The operator never crops.** There is no post-capture editing step, no drag handles, no confirm-crop screen. Adding one would be a second task per scan for no benefit — the operator has already framed the label.
+- The ROI is a fixed rectangle. The operator aligns the label to it while framing, exactly as they already do with a barcode reticle.
+- The crop happens on-device before upload. The backend never sees the surrounding packaging.
+
+Why this matters beyond usability: OCR latency scales with the **number of detected text regions**, not image size. A full pack shot carries ingredients, addresses, statutory text, and barcodes, all of which get detected and recognized at real cost. Cropping to the ROI is the single largest latency lever in the system.
+
+**Coordinate-mapping trap.** The preview surface and the captured image have different resolutions, and often different aspect ratios. Using preview pixel coordinates directly against the full-resolution capture crops the wrong region — usually subtly wrong, which is worse than obviously wrong. Bind the preview and capture use cases to a shared `ViewPort` in a `UseCaseGroup` so CameraX applies a consistent crop rect, and verify the mapping on the TC22 rather than assuming it.
+
 ### Camera workflow
 
 The app should provide a simple scan screen:
 
-1. Show camera preview.
-2. Guide the operator to place the SKU label inside the target area.
-3. Capture an image.
+1. Show camera preview with the ROI window overlaid.
+2. Guide the operator to place the SKU label inside the ROI window.
+3. Capture an image and crop it to the ROI.
 4. Perform only lightweight client-side image-quality checks where practical.
 5. Upload the image to the backend.
 6. Show processing state.
@@ -571,7 +591,37 @@ M.R.P.
 MAX RETAIL PRICE
 ```
 
-These are starting rules only. Keep them configurable and easy to extend.
+These are starting rules only. Keep them configurable and easy to extend. They live in `config/field_aliases.yaml`, never in code.
+
+### Product scope
+
+D-Mart SKU means the **full retail range** — snacks (Lays, Pringles), detergents (Surf Excel), packaged foods, household goods, personal care. Do not tune the extractor around one category.
+
+Practical consequences:
+
+- Layouts vary from columnar printed labels to inkjet dot-matrix stamps on flexible film.
+- Substrates vary: rigid cartons, metallized snack film (glare), curved cans and bottles, crinkled pouches.
+- Not every pack carries every field. A snack pouch typically prints a batch code and no separate lot code. Missing fields are normal, not failures.
+
+### Relative expiry dates
+
+Many Indian FMCG packs print a **shelf life instead of an expiry date**:
+
+```text
+BEST BEFORE 9 MONTHS FROM PACKAGING
+BEST BEFORE NINE MONTHS FROM THE DATE OF MANUFACTURE
+USE WITHIN 6 MONTHS OF MFG
+```
+
+There is no expiry date on the pack to read. Derive it from the manufacturing date plus the printed period.
+
+This does not violate the "never fabricate" rule of section 11 — the pack states both the rule and the manufacturing date, and the rule is simply applied. But it must be:
+
+- marked `DERIVED_RULE`, never `OCR_RULES`
+- flagged so confidence drops into the review band
+- always confirmed by the operator
+
+If the manufacturing date is missing, do not derive. Return the expiry as not found.
 
 ---
 

@@ -45,7 +45,8 @@ Section references below (§n) point at CLAUDE.md sections.
 | R12 | Client device check is spoofable; APK installs on non-Zebra hardware | Restriction is advisory, not enforced | **Accepted by user, no server-side allowlist.** The app is useless off a TC22 because the scan flow refuses to start, and distribution is a controlled store estate. Do not add server-side device validation unless asked | 4 | Accepted |
 | R6 | ZQ320 needs Zebra ZSDK (Link-OS AAR, not on Maven Central) | Build blocked | Obtain SDK during Phase 3 so it is in hand before Phase 5. Vendor to `android/dmart-ocr/app/libs/` (git-ignored) | 5 | Open |
 | R7 | Self-signed HTTPS cert rejected by TC22 | End-to-end blocked at the last step | Decide cert strategy before Phase 6; if self-signed, plan Android network-security-config + device trust store install | 6 | Open |
-| R8 | CPU-only OCR latency **scales with detected region count, not image size** — measured 1.6 s for a 2-region image but **3.9–4.1 s for a 10-region label**. Real SKU labels carry far more text (ingredients, addresses, barcodes, statutory text) and could plausibly hit 30–60 regions | Poor operator UX; possibly unusable | Partly addressed (see §1c). **The dominant remaining lever is cutting region count: crop to the on-screen target rectangle before upload** so OCR never sees non-label text. That is a Phase 4 change. Only if p95 is still bad, add the optional WebSocket (§14) — **no queue** | 1 → 4 → 7 | Measured, partly mitigated |
+| R8 | CPU-only OCR latency **scales with detected region count, not image size** — measured 1.6 s for a 2-region image but **3.9–4.1 s for a 10-region label**. Real SKU labels carry far more text (ingredients, addresses, barcodes, statutory text) and could plausibly hit 30–60 regions | Poor operator UX; possibly unusable | Partly addressed (see §1c). **Dominant remaining lever: the fixed ROI window (§4).** The app crops the capture to the on-screen ROI automatically — no operator crop step — so OCR never sees surrounding packaging. Phase 4 change. Only if p95 is still bad, add the optional WebSocket (§14) — **no queue** | 1 → 4 → 7 | Measured, mitigation designed |
+| R14 | ROI crop uses preview coordinates against a full-resolution capture | Wrong region cropped, subtly rather than obviously — bad OCR that looks like a model problem | Bind preview + capture to a shared `ViewPort` in a `UseCaseGroup` so CameraX derives a consistent crop rect. Verify the mapping on the TC22, not on the dev device | 4 | Known |
 | R9 | QR must fit 10 mm × 10 mm **and** carry all confirmed fields | Unscannable label | Budget computed — see §1b. Fits with headroom. Enforce a payload-length check before emitting ZPL | 5 | Resolved |
 
 ### 1a. PaddleOCR 3.4.1 API — verified by introspection
@@ -167,9 +168,26 @@ Database schema is also applied ahead of Phase 3: `SkuScan`, `SkuScanField`, `Sk
 
 ---
 
-## Phase 2 — Extraction, Normalization, Validation, Confidence (§26 P3 + P4)
+## Phase 2 — Extraction, Normalization, Validation, Confidence (§26 P3 + P4)  ✅ DONE (pending real-image tuning)
 
 **Goal:** tokens → the five target fields, normalized, validated, scored. This is where POC success is actually won or lost.
+
+**Verified end to end.** All five fields extracted from the live pipeline at HIGH confidence, overall 0.961. Extraction costs **19 ms** on top of 4.2 s of OCR — the rules layer is free relative to the model. 176 tests pass.
+
+### Findings
+
+**Relative expiry dates are common and were not in the original spec.** Indian FMCG frequently prints `BEST BEFORE 9 MONTHS FROM PACKAGING` instead of an expiry date — there is nothing on the pack to read. Handled by deriving expiry from the manufacturing date plus the printed period, marked `DERIVED_RULE` rather than `OCR_RULES` and flagged ambiguous so it always lands in the operator's review band. This is not fabrication under §11: the pack states the rule, we apply it, and the operator confirms.
+
+**Two bugs caught by testing against realistic layouts, not synthetic ones:**
+
+- Digit-confusion correction was being applied to whole strings, so ordinary words became numbers. `M.R.P. Rs. 20.00 (incl. of all taxes)` contains I, O and S, which translated to 1, 0 and 5 and were read as competing prices. Correction now applies only inside runs that already contain a real digit.
+- Overall confidence was the minimum across all five *required* fields, which drove it to zero on any pack missing one. Most real packs lack at least one — a snack pouch prints a batch code and no separate lot code. It is now the minimum across *found* fields, with completeness reported separately as explicit null values.
+
+**Spatial distance penalty was initially far too harsh.** SKU labels print label and value as aligned columns, so wide horizontal gaps are normal layout, not evidence of a bad association. The first constant put every correctly-extracted field into REVIEW, which makes the band useless. Softened, and flagged as provisional — this is exactly the constant §12 says must be tuned against real images.
+
+### Still required before this phase truly closes
+
+Threshold and weight tuning against **real D-Mart label images**. The current numbers are engineering defaults validated only against constructed layouts. Until then, treat the confidence figure as directionally useful, not calibrated.
 
 **Deliverables**
 - `services/field_extractor.py`
