@@ -1,0 +1,31 @@
+# D-Mart SKU Label OCR — backend dependencies
+# Pinned to the versions verified working on the dev machine (Windows, Python 3.12.10).
+# CPU only. Do not add GPU packages.
+
+# --- Web layer ---
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+
+# --- Config / models ---
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# --- Imaging ---
+opencv-contrib-python==4.10.0.84
+numpy<2.0
+Pillow==10.3.0
+
+# --- OCR ---
+# 3.x line. This is the line that ships PP-OCRv5. Do NOT downgrade to 2.x —
+# the 2.x API (use_angle_cls, old .ocr() result shape) is incompatible.
+paddlepaddle==3.3.1
+paddleocr==3.4.1
+
+# --- Database ---
+pyodbc==5.1.0
+
+# --- Dev / test ---
+pytest==8.2.0
+pytest-asyncio==0.23.6
+httpx==0.27.0

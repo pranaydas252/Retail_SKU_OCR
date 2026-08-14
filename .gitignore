@@ -1,0 +1,175 @@
+# ---------------------------------------------------------------------------
+# Secrets and local configuration
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+secrets.json
+local.settings.json
+
+# ---------------------------------------------------------------------------
+# Python / FastAPI backend (repo root)
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Test / coverage / type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+nosetests.xml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# PaddleOCR / PaddleX model artifacts and caches
+#
+# Models are downloaded on first run and vendored into /models for deployment.
+# They are large binaries and must never be committed.
+#
+# Leading slash is required — an unanchored "models/" would also swallow
+# app/models/, which holds the Pydantic request/response models.
+# ---------------------------------------------------------------------------
+/models/
+.paddleocr/
+.paddlex/
+paddlex/
+*.pdmodel
+*.pdiparams
+*.pdiparams.info
+*.pdopt
+*.nb
+inference/
+inference_results/
+
+# ---------------------------------------------------------------------------
+# Runtime output — scan images, debug artifacts, logs
+#
+# Scan images are operational data, not source. Paths come from config.
+# ---------------------------------------------------------------------------
+images/
+processed/
+debug/
+logs/
+*.log
+
+# ---------------------------------------------------------------------------
+# Sample data
+#
+# Directory structure and ground-truth JSON/CSV ARE tracked.
+# The image binaries are NOT — they are large and may contain
+# customer/product data. Fetch them via scripts/fetch_sample_data.py.
+# ---------------------------------------------------------------------------
+sample_data/**/*.jpg
+sample_data/**/*.jpeg
+sample_data/**/*.png
+sample_data/**/*.bmp
+sample_data/**/*.tif
+sample_data/**/*.tiff
+sample_data/**/*.webp
+sample_data/**/*.zip
+sample_data/**/*.tar.gz
+!sample_data/**/.gitkeep
+!sample_data/**/expected.json
+!sample_data/**/README.md
+
+# Downloaded third-party datasets
+datasets/
+
+# ---------------------------------------------------------------------------
+# Android — Gradle
+# ---------------------------------------------------------------------------
+android/**/build/
+android/**/.gradle/
+android/**/local.properties
+android/**/.cxx/
+android/.idea/
+android/**/captures/
+android/**/*.apk
+android/**/*.aab
+android/**/*.ap_
+android/**/*.dex
+android/**/*.class
+android/**/output.json
+android/**/release/
+
+# Keystores — never commit signing material
+*.jks
+*.keystore
+
+# Zebra Link-OS (ZSDK) AAR is vendored locally, not committed
+android/**/libs/*.aar
+android/**/libs/*.jar
+
+# Android lint
+android/**/lint-results*.html
+android/**/lint-results*.xml
+
+# ---------------------------------------------------------------------------
+# IDE / editor
+# ---------------------------------------------------------------------------
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+.fleet/
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ---------------------------------------------------------------------------
+# Misc
+# ---------------------------------------------------------------------------
+*.bak
+*.tmp
+*.swp
+*~
