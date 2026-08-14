@@ -39,7 +39,11 @@ Section references below (§n) point at CLAUDE.md sections.
 | R2 | First PaddleOCR run downloads models from the network | Slow first scan / air-gapped failure | **Accepted by user.** Models pre-initialized before demo. `scripts/warmup_models.py` + startup warmup inference + Android "preparing OCR" state. Model dir configurable, vendored to `models/` for deploy | 1 / 6 | Resolved |
 | R3 | No real D-Mart label images yet | Phase 2 accuracy gate is unverifiable | Build against ExpDate (1,767 real product photos, date/prod/code annotated) + Kaggle sets — see [sample_data/README.md](sample_data/README.md). Real-image run is a **separate second gate** | 2 | Mitigated |
 | R4 | Indian retail labels often carry Devanagari/regional script alongside English | Junk tokens, bad spatial association | Start `lang="en"`; evaluate multilingual only if real images demand it. Log unrecognized-script rate | 2 | Open |
-| R5 | TC22 not yet connected | Camera/printer assumptions untested | Develop on SM-S711B; TC22 arriving. **EMDK/DataWedge ruled out** — CameraX only, so the app builds and runs on any Android device | 4 | Mitigated |
+| R5 | TC22 not yet connected | Camera/printer assumptions untested | Develop on SM-S711B; TC22 arriving. See R10 — the Zebra-only gate must not block this | 4 | Open |
+| R10 | **Zebra-only device gate blocks all development** until a TC22 physically arrives | Phase 4 stalls entirely | Gate driven by a build-config flag: `debug → ENFORCE_ZEBRA_ONLY=false`, `release → true`. Debug bypass logs a loud warning and is never enabled in release | 4 | Mitigated by design |
+| R11 | EMDK `PackageManager` check silently fails on **every** device, Zebra included, if the Android 11+ `<queries>` element is missing | Gate rejects genuine TC22s; looks like a hardware fault | Manifest must declare `<queries><package android:name="com.symbol.emdk.emdkservice" /></queries>`. Add a test that asserts its presence | 4 | Known |
+| R12 | Client device check is spoofable on a rooted device | Restriction is cosmetic | Client gate = UX. **Server-side device allowlist is the actual control** — app sends model + serial, backend rejects non-Zebra | 3 / 4 | Design decided |
+| R13 | Public datasets cover ~2.5 of 5 fields — **no MRP data at all**, batch/lot not distinguished, and the print domain differs (inkjet date stamps vs printed label stock) | False confidence from a good public score | Report accuracy per source and per bucket, never blended. Real D-Mart images stay the gate | 2 | Quantified |
 | R6 | ZQ320 needs Zebra ZSDK (Link-OS AAR, not on Maven Central) | Build blocked | Obtain SDK during Phase 3 so it is in hand before Phase 5. Vendor to `android/dmart-ocr/app/libs/` (git-ignored) | 5 | Open |
 | R7 | Self-signed HTTPS cert rejected by TC22 | End-to-end blocked at the last step | Decide cert strategy before Phase 6; if self-signed, plan Android network-security-config + device trust store install | 6 | Open |
 | R8 | CPU-only OCR latency. PP-OCRv5 published CPU times: mobile ~1.75 s/image, server ~4.34 s/image, before OpenCV preprocessing and multi-variant runs | Poor operator UX | Measure in Phase 1. Model combination is config-driven so it can be tuned, not rewritten. Only if p95 is bad, add the optional WebSocket (§14) — **no queue** | 1 → 7 | Quantified |
@@ -142,6 +146,7 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 - `services/confidence.py` (§12) — weighted blend of OCR confidence, label-match quality, spatial quality, format validity, cross-field consistency, cross-variant agreement. Bands: `≥0.95 HIGH` / `0.80–0.95 REVIEW` / `<0.80 LOW`. Documented as engineering defaults, **not calibrated probabilities**
 - `NO_TEXT_DETECTED` status path (§22) — a valid result, not a 500
 - `sample_data/expected.json` ground truth + `tests/test_accuracy.py` producing the **field-level** accuracy table of §24 (per-field accuracy, false accepts, false rejects, no-detection rate, manual-correction rate, mean processing time)
+- **Dataset adapters** — one per public source, each emitting the common ground-truth schema. Two test layers: ExpDate *real* photos drive end-to-end accuracy; digit crops drive recognizer/normalizer unit tests. Report is broken down **per source and per bucket, never blended**. Synthetic splits excluded from the accuracy gate. See [sample_data/README.md](sample_data/README.md) and R13
 - Unit tests for date parsing and field extraction (explicitly required by §28)
 
 **Exit gate:** §30 first-runnable-milestone complete end-to-end on the server, plus a printed accuracy report over `sample_data/`. **Second gate, once real D-Mart images arrive (R3): re-run and tune thresholds.**
@@ -162,6 +167,7 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 - `services/scan_service.py` — orchestrates preprocess → OCR → extract → validate → persist
 - `POST /api/v1/scans/{scanId}/confirm` (§13) — server re-validates operator edits before persisting
 - `GET /api/v1/scans/{scanId}` (§13)
+- **Server-side device allowlist (R12)** — every scan request carries device model + serial; the backend rejects anything not on the allowed Zebra list. This is the real enforcement of the Zebra-only rule; the client gate is only UX. Allowlist is config-driven, not hard-coded
 - DB failure → server error with the scan's processing state left diagnosable (§22)
 
 **Exit gate:** scan → confirm → rows present in `SkuScan` / `SkuScanField` / `SkuScanOcr`, verified via `sqlcmd`; every item in §16 is recoverable for a given scanId.
@@ -176,7 +182,14 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 
 **Deliverables** — `android/dmart-ocr/`
 - Kotlin, Gradle wrapper, AGP 8.x + JDK 17, Compose. `targetSdk 35`, `minSdk` set to the TC22's actual API level (see Open Decisions Q1)
-- Scan screen: CameraX preview + target-area overlay + capture (§4)
+- **Zebra-only device gate (§4)** — build this first, it shapes everything after it:
+  - `compileOnly 'com.symbol:emdk:+'`, Zebra Maven repo declared under `dependencyResolutionManagement` in `settings.gradle`
+  - Manifest `<queries><package android:name="com.symbol.emdk.emdkservice" /></queries>` — **without this the check fails on real Zebra hardware too (R11)**
+  - Three-step check, fail closed: `Build.MANUFACTURER` contains `Zebra Technologies` **or** `Motorola Solutions` → `PackageManager` resolves `com.symbol.emdk.emdkservice` → `EMDKManager` initializes
+  - Terminal "unsupported device" screen. No degraded fallback
+  - `ENFORCE_ZEBRA_ONLY` build-config flag: `false` in debug, `true` in release (R10). Debug bypass logs a loud warning
+  - Unit test asserting the `<queries>` element is present in the merged manifest
+- Scan screen: CameraX preview + target-area overlay + capture (§4). **EMDK is not in the capture path** — CameraX only
 - Lightweight client-side quality checks **only** (§4): readable image, min resolution, Laplacian-variance blur, mean-brightness. No client-side OCR, no vision pipeline
 - Retrofit/OkHttp multipart upload; Kotlin data classes mirroring the §4 response
 - Processing state screen
@@ -271,7 +284,7 @@ Redis · RabbitMQ · Celery · Kafka · PostgreSQL · vector DBs · LLMs · VLMs
 
 | # | Question | Resolution |
 | --- | --- | --- |
-| Q1 | EMDK / DataWedge needed? | **No.** CameraX alone. TC22 arriving soon; app stays device-agnostic so development is never blocked on hardware. Written into CLAUDE.md §4. |
+| Q1 | EMDK / DataWedge needed? | **Revised 2026-08-14.** Originally "no". Now: the app must run **only on Zebra hardware**, so EMDK is used for **device gating only** — never for capture, which stays CameraX. DataWedge still unused. Enforcement is client gate (UX) + server-side device allowlist (actual control). CLAUDE.md §4 rewritten. |
 | Q2a | Repo layout | **Backend at repository root**, Android in `android/`. CLAUDE.md §5 and §29 updated to match. |
 | Q2b | Model download on first run | **Accepted.** Progress state in app + `scripts/warmup_models.py` + startup warmup. Models pre-initialized before any demo. |
 | Q4a | QR specification | **10 mm × 10 mm**, carries all confirmed OCR fields, ZPL `^BQ`, Zebra ZSDK over Bluetooth. CLAUDE.md §17 and §18 rewritten. |

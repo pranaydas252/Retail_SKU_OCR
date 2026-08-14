@@ -35,7 +35,7 @@ The **backend lives at the repository root**. The Android project lives in `andr
 
 | Layer | Choice |
 | --- | --- |
-| Device | Zebra TC22, CameraX (no EMDK, no DataWedge) |
+| Device | Zebra TC22 **only** — EMDK device gate; CameraX for capture; no DataWedge |
 | App | Kotlin, Jetpack Compose |
 | Transport | HTTPS REST, multipart image upload |
 | Server | Python 3.12, FastAPI, Uvicorn behind IIS |

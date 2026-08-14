@@ -121,14 +121,67 @@ The Android application must not perform the primary OCR workload.
 
 ### Zebra Android SDKs
 
-- **EMDK is not used.**
-- **DataWedge is not used.**
+| SDK | Used for | Not used for |
+| --- | --- | --- |
+| **EMDK for Android** | Device gating only — proving the app is running on a Zebra device | Camera, capture, scanning |
+| **ZSDK (Link-OS)** | ZQ320 printing over Bluetooth (section 18) | Anything else |
+| **DataWedge** | Nothing. Not used. | — |
 
-The TC22 camera is driven by CameraX alone. Do not add Zebra capture middleware for label imaging.
+Image capture is driven by **CameraX alone**. Do not route label imaging through EMDK, DataWedge, or any Zebra capture middleware.
 
-The only Zebra SDK in this build is **ZSDK (Link-OS)** for the ZQ320 printer. See section 18.
+### Device restriction — Zebra only
 
-This keeps the app buildable and testable on any ordinary Android device, with the TC22 used for final validation.
+The application must run **only on Zebra hardware, targeting the TC22**. It must refuse to operate on a non-Zebra Android device.
+
+EMDK 13.0 supports TC21, TC22, TC27, TC53, and TC73 on Android 13.
+
+#### Client-side gate
+
+Check on launch, in this order, and fail closed:
+
+1. `Build.MANUFACTURER` contains `"Zebra Technologies"` or `"Motorola Solutions"` — older Zebra units are rebranded Motorola Solutions, so both strings must be accepted.
+2. `PackageManager` resolves `com.symbol.emdk.emdkservice`.
+3. `EMDKManager` initializes successfully.
+
+On failure, show a terminal "unsupported device" screen. Do not allow the scan flow to start, and do not fall back to a degraded mode.
+
+**Android 11+ package-visibility requirement.** The manifest must declare:
+
+```xml
+<queries>
+    <package android:name="com.symbol.emdk.emdkservice" />
+</queries>
+```
+
+Without this, the `PackageManager` lookup silently returns "not found" on **every** device, including genuine Zebra hardware, and the gate rejects everything. This is the most common way this check is implemented wrong.
+
+#### Gradle dependency
+
+```gradle
+compileOnly 'com.symbol:emdk:+'
+```
+
+EMDK is **`compileOnly`**. The runtime ships on the Zebra device; the AAR is compile-time only. Consequences that must be understood:
+
+- The APK still builds and installs on a non-Zebra device. The restriction is enforced at runtime, not by the build.
+- The dependency resolves from Zebra's Maven repository, which must be declared under `dependencyResolutionManagement` in `settings.gradle` for current Gradle versions.
+
+#### Build-variant escape hatch — required
+
+The gate must be driven by a build-config flag, not hard-coded:
+
+```text
+debug   -> ENFORCE_ZEBRA_ONLY = false
+release -> ENFORCE_ZEBRA_ONLY = true
+```
+
+Without this, no development or testing is possible on any machine until a TC22 is physically available. The debug bypass must log a loud warning and must never be enabled in a release build.
+
+#### Server-side enforcement
+
+The client gate is **user experience, not security**. `Build.MANUFACTURER` is spoofable on a rooted device.
+
+The real restriction is server-side: the Android app sends its device model and serial with every scan request, and the backend rejects any device that is not on the allowed Zebra device list. Treat the client check as a fast, friendly failure and the server check as the actual control.
 
 ### Camera workflow
 
@@ -947,7 +1000,7 @@ The Android application is responsible for communicating with the Zebra mobile p
 
 The ZSDK is distributed as an AAR and is not available on Maven Central. Vendor it into the Android project's local libs directory and commit the dependency declaration, not the binary, if repository policy forbids binaries.
 
-Do not use EMDK or DataWedge for this build. The TC22 camera is driven by CameraX, and the printer is driven by ZSDK over Bluetooth.
+ZSDK is for printing only. Device gating uses EMDK (section 4); image capture uses CameraX. DataWedge is not used anywhere in this build.
 
 ### Abstraction
 
@@ -1187,6 +1240,39 @@ Example:
   }
 }
 ```
+
+### Public datasets
+
+Public datasets are scaffolding used until real D-Mart label images exist. They are **not** a substitute for the accuracy gate.
+
+Combine them at the **harness** level, not on disk. Each source keeps its own directory and its own licence; a shared adapter converts each into the ground-truth schema above, and the accuracy report breaks results down by source.
+
+Do not merge sources into one undifferentiated image pool. They sit at different pipeline layers:
+
+| Layer | Source | Tests |
+| --- | --- | --- |
+| End-to-end | ExpDate real product photos | Detection, recognition, spatial association, normalization |
+| Unit | Cropped digit datasets | Recognizer and normalizer only, including `O/0 I/1 S/5 B/8 G/6 Z/2` disambiguation |
+
+Rules:
+
+- **Real images only in the accuracy gate.** Synthetic images may be used for stress-testing the normalizer, but must never be mixed into the reported accuracy number — synthetic data inflates it.
+- **Report per source and per bucket.** A single blended figure hides which conditions fail.
+- **Do not redistribute.** Several public sets state no licence, which grants no rights. Local R&D evaluation only. Downloaded data stays git-ignored.
+
+### Known coverage gaps
+
+Public data does not cover the full field set. This is why real D-Mart images remain mandatory:
+
+| Field | Public coverage |
+| --- | --- |
+| `expiryDate` | Good |
+| `manufacturingDate` | Good |
+| `batchNumber` | Partial — usually annotated as a generic code, not distinguished from lot |
+| `lotCode` | Partial — same problem |
+| `mrp` | **None.** No public dataset covers Indian MRP printing |
+
+There is also a domain gap: public expiry datasets are dominated by inkjet and dot-matrix date stamps on packaging, whereas D-Mart SKU labels are printed label stock. The failure modes differ. Treat public results as a smoke test of the logic, not a prediction of field performance.
 
 ---
 

@@ -107,6 +107,59 @@ They could seed `SkuMaster` if D-Mart master data is unavailable, nothing more.
 
 ---
 
+---
+
+## Merging ExpDate + Expiry Date Digits
+
+Yes — but not as one image pool. They sit at **different pipeline layers**, and blending them produces a meaningless accuracy number.
+
+### Why they don't merge directly
+
+| | ExpDate | Expiry Date Digits |
+| --- | --- | --- |
+| Granularity | Whole product photograph | Cropped single digits |
+| Annotation | bbox + transcription + class | Digit label |
+| Exercises | det → rec → association → normalize | rec + normalize only |
+
+Dropping digit crops into `sample_data/good/` would score them through a detection stage they were never meant to test, and would drag the reported end-to-end number toward whichever set is larger.
+
+### How to merge them properly
+
+Keep each source in its own directory under `datasets/` (git-ignored, licences unmixed). Write a **per-source adapter** that emits the common ground-truth schema, and have one harness consume both while **reporting separately**.
+
+```text
+datasets/expdate/          ── adapter ──┐
+datasets/expiry-digits/    ── adapter ──┤──> common schema ──> accuracy harness
+sample_data/<bucket>/      ── native ───┘                          │
+                                                                   v
+                              report broken down by source AND bucket
+```
+
+Two test layers:
+
+- **Layer 1 — end-to-end.** ExpDate *real* photos (1,767). Full pipeline.
+- **Layer 2 — unit.** Digit crops. Feeds recognizer and normalizer tests directly, especially the `O/0 I/1 S/5 B/8 G/6 Z/2` confusion handling of `CLAUDE.md` section 10.
+
+### ExpDate class mapping
+
+| ExpDate class | Our field |
+| --- | --- |
+| `prod` | `manufacturingDate` |
+| `due` | `expiryDate` |
+| `date` | ambiguous — needs a disambiguation rule, do not map blindly |
+| `code` | `batchNumber` **or** `lotCode` — ExpDate does not distinguish them |
+
+### Hard limits — read before trusting the numbers
+
+- **Exclude the synthetic split from the accuracy gate.** ExpDate ships ~12,000 synthetic images plus ~128,000 synthetic date crops and ~450,000 component crops. Useful for stress-testing the normalizer, ruinous if mixed into a reported accuracy figure. Real-only for the gate.
+- **MRP has zero public coverage.** One of our five required fields cannot be validated by any dataset here.
+- **Batch vs lot cannot be validated either** — `code` collapses both.
+- **Domain gap.** ExpDate is dominated by inkjet/dot-matrix date stamps on food and medicine packaging. D-Mart SKU labels are printed label stock. Different print process, different failure modes.
+
+Net: this combination validates roughly **two and a half of five fields** and tests the date logic well. It does not predict field performance on D-Mart labels. Real images remain the gate.
+
+---
+
 ## Downloading
 
 Kaggle datasets need an account and API token (`~/.kaggle/kaggle.json`):
