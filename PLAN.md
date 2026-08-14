@@ -264,11 +264,19 @@ Validation problems never block a confirm. The operator is the final authority (
 
 ---
 
-## Phase 4 — Android App (§26 P6)  ⚠️ WRITTEN, NOT COMPILED
+## Phase 4 — Android App (§26 P6)  ✅ DONE — VERIFIED ON TC22
 
 **Goal:** the operator workflow of §4, running on real hardware.
 
-**Status: code complete, build not run.** The user opted to run it directly on a TC22 rather than build locally, so **nothing here has been through a compiler.** Static cross-checks were done instead — every resource reference, every `R.*` usage, and every ViewBinding field verified against the layouts, plus a non-ASCII sweep after two Cyrillic characters were found in a method name. That catches whole classes of error but is not a compiler. **Expect build errors on first `assembleDebug`.**
+**Built, installed and verified on a real Zebra TC22** (Android 14, SDK 34). Full chain confirmed:
+
+```text
+Captured 3060x4080, cropped to 2692x1224 (rotation 90)
+POST /api/v1/scans -> 200 OK in 1588ms
+SCAN-000048 | NO_TEXT_DETECTED | Zebra Technologies TC22 | 1487ms
+```
+
+**R14 is closed.** The shared-`ViewPort` approach produces a correct ROI crop on real optics, and device attribution reaches `SkuScan.DeviceModel`.
 
 Stack: Kotlin + XML views, **no Compose**, light theme only, Material 3.
 
@@ -288,11 +296,35 @@ Palette derived from the Markss mark: ink `#0F1010`, cyan `#00A7E8` sampled from
 
 Dynamic colour deliberately off: confidence bands carry safety meaning and must not be retinted by wallpaper. Each band is signalled three ways — coloured rail, chip background, chip text — so it survives colour blindness and warehouse glare. Fields are sorted **worst-confidence-first**, so the values most likely to be wrong are never below the fold.
 
-### Verification still required on a TC22
+### The bug real hardware caught
 
-- R14, the ROI coordinate mapping. The `ViewPort` approach is correct in principle; it has not been seen working on device.
-- Device gate against genuine Zebra hardware, especially that the `<queries>` element does its job (R11).
-- End-to-end scan → confirm against the live backend.
+**The EMDK-based gate would have blocked the TC22 it was written for.**
+
+`com.symbol.emdk.emdkservice` is **not** preinstalled on a TC22 running Android 14 — the EMDK runtime is a separate install. The device carries 115 Zebra and Symbol system packages and none of EMDK. Requiring it would have made the app refuse to run on the only hardware it targets, and the symptom would have been indistinguishable from R11's missing-`<queries>` failure while having an entirely different cause.
+
+The gate now keys off Zebra's MX management framework (`com.symbol.mxmf`), with DataWedge as fallback and EMDK accepted-but-not-required. Each candidate must be installed **as a system package**, which closes the trivial spoof of sideloading an app under a Zebra package name. Verified on device:
+
+```text
+I ZebraGate: Zebra device verified: Zebra Technologies TC22 via com.symbol.mxmf
+```
+
+### Build errors only a compiler would find
+
+- `settings.gradle.kts` regex escaping collapsed to an illegal Kotlin escape.
+- `local.properties` used single backslashes, so Java's properties parser consumed `\U`, `\L`, `\A` as escapes and mangled `sdk.dir`. The build reported only a bare `Invalid file path`. Forward slashes now, with the trap documented in `local.properties.example`.
+- `Json.encodeToString` inside a companion object resolved to the member overload expecting a `SerializationStrategy` rather than the reified extension.
+
+### Runtime configuration
+
+Server address and printer Bluetooth MAC moved out of compile-time `BuildConfig` into a settings dialog backed by `SharedPreferences`. A compile-time endpoint is useless in a store where the address changes per site and nobody rebuilds an APK to enter it. An OkHttp interceptor rewrites each request onto the configured host, because Retrofit fixes its base URL at construction and rebuilding the client per settings change would leak connection pools and race with in-flight calls. `BuildConfig` still supplies the default, so no endpoint is hard-coded.
+
+### Repository portability
+
+No keystore, no `signingConfig`, no absolute paths in tracked files, and the build falls back to defaults when `local.properties` is absent — a fresh clone compiles on any machine.
+
+### Still unverified
+
+A real D-Mart label through scan → confirm → persist. The pipeline is proven end to end; only OCR accuracy on genuine packaging remains unmeasured.
 
 **Deliverables** — `android/dmart-ocr/`
 - Kotlin, Gradle wrapper, AGP 8.x + JDK 17, Compose. `targetSdk 35`, `minSdk` set to the TC22's actual API level (see Open Decisions Q1)

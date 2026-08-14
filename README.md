@@ -130,7 +130,7 @@ python -m pytest tests -q
 | 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
 | 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
 | 3 — SQL Server persistence, confirm/fetch endpoints | Done |
-| 4 — Android app (Kotlin + XML) | Code complete; not yet compiled or run on device |
+| 4 — Android app (Kotlin + XML) | Done — built and verified on a real TC22 |
 | 5 — ZQ320 printing | Not started |
 | 6 — IIS deployment | Not started |
 
