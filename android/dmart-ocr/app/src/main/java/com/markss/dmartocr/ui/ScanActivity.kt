@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
@@ -29,6 +30,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.markss.dmartocr.R
 import com.markss.dmartocr.data.ApiClient
+import com.markss.dmartocr.data.AppPreferences
+import com.markss.dmartocr.data.SampleStore
 import com.markss.dmartocr.data.ScanResponse
 import com.markss.dmartocr.databinding.ActivityScanBinding
 import com.markss.dmartocr.device.DeviceId
@@ -74,6 +77,12 @@ class ScanActivity : AppCompatActivity() {
         binding.closeButton.setOnClickListener { finish() }
         binding.torchButton.setOnClickListener { toggleTorch() }
         binding.captureButton.setOnClickListener { capture() }
+
+        if (AppPreferences.sampleMode) {
+            binding.instruction.setText(R.string.sample_mode_banner)
+            binding.instructionHint.text =
+                getString(R.string.sample_mode_hint, SampleStore.count(this))
+        }
 
         positionInstructionAboveRoi()
 
@@ -195,10 +204,14 @@ class ScanActivity : AppCompatActivity() {
                         image.close()
                     }
 
-                    if (bytes == null) {
-                        runOnUiThread { failed(getString(R.string.error_server)) }
-                    } else {
-                        upload(bytes)
+                    when {
+                        bytes == null ->
+                            runOnUiThread { failed(getString(R.string.error_server)) }
+
+                        AppPreferences.sampleMode ->
+                            runOnUiThread { saveSample(bytes) }
+
+                        else -> upload(bytes)
                     }
                 }
 
@@ -252,6 +265,31 @@ class ScanActivity : AppCompatActivity() {
             cropped.compress(Bitmap.CompressFormat.JPEG, 92, out)
             out.toByteArray()
         }
+    }
+
+    /**
+     * Stores the crop instead of uploading, and stays on the camera.
+     *
+     * Collection is a bulk task — the operator photographs a shelf of products
+     * one after another — so returning to the viewfinder immediately is the
+     * whole point. Routing each capture through the result screen would make
+     * gathering thirty samples a thirty-step chore.
+     */
+    private fun saveSample(bytes: ByteArray) {
+        val total = SampleStore.save(this, bytes)
+        showProcessing(false)
+        capturing = false
+
+        if (total == null) {
+            failed(getString(R.string.sample_save_failed))
+            return
+        }
+
+        Toast.makeText(
+            this,
+            getString(R.string.sample_saved, total),
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     private fun upload(bytes: ByteArray) {

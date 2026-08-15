@@ -29,6 +29,7 @@ object SettingsDialog {
 
         binding.serverInput.setText(AppPreferences.serverUrl)
         binding.printerInput.setText(AppPreferences.printerMac)
+        binding.sampleModeSwitch.isChecked = AppPreferences.sampleMode
 
         val dialog = MaterialAlertDialogBuilder(context)
             .setTitle(R.string.settings_title)
@@ -103,6 +104,7 @@ object SettingsDialog {
 
                 AppPreferences.serverUrl = server
                 AppPreferences.printerMac = mac
+                AppPreferences.sampleMode = binding.sampleModeSwitch.isChecked
                 dialog.dismiss()
                 onSaved()
             }

@@ -87,6 +87,23 @@
         android:textAppearance="@style/TextAppearance.DmartOcr.Body"
         android:textSize="12sp" />
 
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/sampleModeSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:fontFamily="@font/google_sans"
+        android:text="@string/settings_sample_mode"
+        android:textAppearance="@style/TextAppearance.DmartOcr.Title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/settings_sample_mode_help"
+        android:textAppearance="@style/TextAppearance.DmartOcr.Body"
+        android:textSize="12sp" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/testPrintButton"
         style="@style/Widget.Material3.Button.OutlinedButton"

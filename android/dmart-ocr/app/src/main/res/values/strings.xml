@@ -44,6 +44,14 @@
     <string name="scan_permission_body">The scanner cannot run without the camera. Enable it in Settings to continue.</string>
     <string name="scan_permission_settings">Open settings</string>
 
+    <!-- Sample collection -->
+    <string name="sample_mode_banner">Sample collection — not sent to server</string>
+    <string name="sample_mode_hint">%1$d saved so far</string>
+    <string name="sample_saved">Saved. %1$d samples collected.</string>
+    <string name="sample_save_failed">Could not save the sample to this device.</string>
+    <string name="settings_sample_mode">Collect samples instead of scanning</string>
+    <string name="settings_sample_mode_help">Captures are saved on the device and never sent to the server. Pull them with: adb pull /sdcard/Android/data/com.markss.dmartocr/files/Pictures/samples</string>
+
     <!-- Errors -->
     <string name="error_blurry">Image looks blurred. Hold steady and try again.</string>
     <string name="error_dark">Too dark to read. Use the torch or move to better light.</string>

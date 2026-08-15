@@ -21,6 +21,7 @@ object AppPreferences {
     private const val FILE = "dmart_ocr_settings"
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_PRINTER_MAC = "printer_mac"
+    private const val KEY_SAMPLE_MODE = "sample_mode"
 
     private val MAC_PATTERN = Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
@@ -35,6 +36,19 @@ object AppPreferences {
         get() = prefs.getString(KEY_SERVER_URL, null)?.takeIf { it.isNotBlank() }
             ?: BuildConfig.BACKEND_BASE_URL
         set(value) = prefs.edit().putString(KEY_SERVER_URL, normalizeUrl(value)).apply()
+
+    /**
+     * Sample collection mode.
+     *
+     * When on, a capture is written to device storage instead of being
+     * uploaded. Accuracy is currently measured against full-frame photographs,
+     * which are a harder input than the app actually produces — it crops to the
+     * ROI window first. This mode collects the real thing, so the measurement
+     * matches what operators will see.
+     */
+    var sampleMode: Boolean
+        get() = prefs.getBoolean(KEY_SAMPLE_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_SAMPLE_MODE, value).apply()
 
     /** Zebra ZQ320 Bluetooth MAC. Consumed by printing in Phase 5. */
     var printerMac: String
