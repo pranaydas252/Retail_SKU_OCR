@@ -169,6 +169,45 @@ class TestRealLabelLayouts:
             "mrp": "245.00",
         }
 
+    def test_tall_label_box_does_not_steal_the_next_row(self):
+        """A label box spanning two printed rows must still pick its own value.
+
+        Real geometry from a jar capture. "Mfg. Date:" was recognised as a
+        238px-tall box covering its own row and part of the one below, so both
+        values passed the same-line test. Horizontal distance could not tell
+        them apart — the value column shares an x — and the row below won by
+        ten pixels, putting the expiry date into the manufacturing field.
+        """
+        fields = extract_fields(
+            [
+                token("Mfg. Date:", 212, 142, 531, 238),
+                token("1610612026", 1045, 143, 492, 134),
+                token("1610112027", 1035, 274, 492, 124),
+                token("Use By:", 216, 318, 416, 219),
+            ]
+        )
+
+        # Slashes came back as 1s, which the normalizer repairs.
+        assert fields["manufacturingDate"].normalized.value == "2026-06-16"
+        assert fields["expiryDate"].normalized.value == "2027-01-16"
+
+    def test_unit_price_never_becomes_the_mrp(self):
+        """The per-unit price sits beside the MRP on nearly every pack.
+
+        Both figures are near the MRP label, so whichever the spatial search
+        reaches first wins. Returning 0.30 as the price of a 60-rupee pack is
+        a confident wrong value, which section 24 treats as worse than a miss.
+        """
+        fields = extract_fields(
+            [
+                token("MRP:", 40, 100, 120, 40),
+                token("Rs.0.30/g", 200, 100, 160, 40),
+                token("Rs.60.00", 380, 100, 160, 40),
+            ]
+        )
+
+        assert fields["mrp"].normalized.value == "60.00"
+
     def test_snack_pouch_layout(self):
         fields = extract_fields(
             [

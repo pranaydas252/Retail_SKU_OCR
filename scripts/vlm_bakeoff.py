@@ -94,6 +94,12 @@ TRAPS THAT MATTER
 - A shelf life such as "BEST BEFORE 9 MONTHS FROM PACKAGING" is not a date.
   Leave expiryDate null; do not calculate it.
 
+READING CODES
+Batch and lot codes have no fixed format, so they cannot be guessed from
+context — read them character by character from your transcription. Keep
+letters as letters and digits as digits: do not "correct" O to 0, I to 1 or
+S to 5, and preserve any spaces, hyphens or slashes exactly as printed.
+
 OUTPUT FORMAT
 - Dates: "YYYY-MM-DD" when a day is printed, otherwise "YYYY-MM". Indian packs
   are day-first, so 03/06/2026 is 3 June 2026.
@@ -107,15 +113,19 @@ Return the JSON object only, with no commentary."""
 #: Longest side sent to the model.
 #:
 #: A vision model encodes a large image as thousands of tokens, and on CPU that
-#: dominates the run time. Measured on one capture: 2692px took 242s, 1600px
-#: 77s and 1100px 58s, with identical output every time. Sending the full crop
-#: was paying four minutes for nothing.
+#: dominates the run time. Measured on one capture with qwen2.5vl:3b: 2692px
+#: took 242s, 1600px 77s and 1100px 58s, with identical output every time.
+#: Sending the full crop was paying four minutes for nothing.
+#:
+#: The best size is model-specific, so --max-side overrides this. A document
+#: model may want more pixels than a general vision model, because the whole
+#: task is reading small print.
 MAX_SIDE = 1100
 
 
-def encode(path: Path) -> str:
+def encode(path: Path, max_side: int = MAX_SIDE) -> str:
     image = Image.open(path)
-    image.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    image.thumbnail((max_side, max_side), Image.LANCZOS)
     buffer = io.BytesIO()
     image.convert("RGB").save(buffer, "JPEG", quality=92)
     return base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -148,11 +158,11 @@ def normalize(field: str, value) -> str | None:
     return result.value if result.ok else text
 
 
-def ask(model: str, image: Path, timeout: int) -> tuple[dict, float]:
+def ask(model: str, image: Path, timeout: int, max_side: int) -> tuple[dict, float]:
     payload = json.dumps({
         "model": model,
         "prompt": PROMPT,
-        "images": [encode(image)],
+        "images": [encode(image, max_side)],
         "stream": False,
         "format": "json",
         "options": {
@@ -191,6 +201,8 @@ def main() -> int:
     parser.add_argument("--model", default="qwen2.5vl:3b")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--max-side", type=int, default=MAX_SIDE,
+                        help="longest side sent to the model")
     parser.add_argument("--json", help="write raw model output here")
     args = parser.parse_args()
 
@@ -208,7 +220,7 @@ def main() -> int:
             continue
 
         try:
-            got, elapsed = ask(args.model, path, args.timeout)
+            got, elapsed = ask(args.model, path, args.timeout, args.max_side)
         except (urllib.error.URLError, TimeoutError) as exc:
             print(f"{path.name:32s} FAILED: {exc}", file=sys.stderr)
             continue

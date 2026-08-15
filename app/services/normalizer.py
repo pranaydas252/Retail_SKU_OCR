@@ -119,6 +119,55 @@ def _month_from_name(text: str) -> int | None:
     return None
 
 
+#: A date whose separators were recognised as the digit 1.
+#:
+#: On thin inkjet print a forward slash and a "1" are nearly the same mark, and
+#: the recogniser returns "16/06/2026" as "1610612026". The digits are all
+#: correct — only the separators are wrong — so the value is recoverable, but a
+#: greedy date match reads the run as a licence number and gives up. Two of the
+#: captures were counted as "never recognised" for exactly this reason.
+#:
+#: Deliberately narrow: the 1s must sit exactly where separators belong, and
+#: the day and month either side must be real. A phone number or a batch code
+#: will not satisfy all three conditions at once.
+_SLASH_AS_ONE = re.compile(r"^(\d{2})1(\d{2})1(\d{2}|\d{4})$")
+
+#: A complete day-month-year date, wherever it sits in a noisy token.
+#:
+#: Inkjet stamps run fields together, so the recogniser returns the expiry
+#: welded to whatever preceded it: "L409/06/2027" is a lot-code tail followed
+#: by 09/06/2027, and "B.05/08/2027" is a label fragment followed by
+#: 05/08/2027. Parsing the whole token yields nonsense or nothing.
+#:
+#: Only used when the token does not already begin with a digit, so a
+#: well-formed date is never re-cut, and only for complete three-part dates —
+#: a partial match would let this invent a day that was not printed.
+_EMBEDDED_DATE = re.compile(
+    r"\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{4}"
+    r"|\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{2}"
+)
+
+
+def _repair_slash_read_as_one(text: str) -> str:
+    """Put the separators back into DD1MM1YYYY, when the parts are valid."""
+    match = _SLASH_AS_ONE.match(text)
+    if not match:
+        return text
+
+    day, month, year = match.groups()
+    if not 1 <= int(day) <= 31 or not 1 <= int(month) <= 12:
+        return text
+    return f"{day}/{month}/{year}"
+
+
+def _strip_leading_junk(text: str) -> str:
+    """Cut a clean date out of a token that starts with something else."""
+    if not text or text[0].isdigit():
+        return text
+    found = _EMBEDDED_DATE.search(text)
+    return found.group(0) if found else text
+
+
 def normalize_date(raw: str, precision: str = "month") -> NormalizedValue:
     """Normalize a printed date.
 
@@ -158,6 +207,9 @@ def normalize_date(raw: str, precision: str = "month") -> NormalizedValue:
     # Strip a leading label fragment the extractor may have carried along.
     text = re.sub(r"^(MFG|MFD|EXP|EXPIRY|PKD|PACKED|USE BEFORE|BEST BEFORE)[.:\s]*", "", text)
     text = text.strip(" .:-–—")
+
+    text = _repair_slash_read_as_one(text)
+    text = _strip_leading_junk(text)
 
     named = _try_named_month(text)
     if named is not None:
@@ -279,6 +331,34 @@ def _valid_day(year: int, month: int, day: int) -> bool:
         return False
 
 
+#: A per-unit price. Never the MRP, and the single most common wrong answer
+#: for that field on an Indian retail pack.
+#:
+#: Written against what the recogniser returns rather than how the pack is
+#: printed. Measured across the ROI captures, the unit price came back as
+#: "0.30/g", "0.35/9", "0.43/9", "0.45/m", "(30.451g)" and welded to the
+#: retail price as "250.00(0.31/9)". Both halves of the "/g" need to tolerate
+#: confusion:
+#:
+#: * the separator "/" is read as "1" or "|" — "30.451g" is "30.45/g"
+#: * the unit "g" is read as "9" or "q", and "ml" is truncated to "m"
+#:
+#: Requiring a literal "/g" matched two of those six. Exported because the
+#: field extractor needs the identical judgement when it decides whether a
+#: token beside the MRP label is a candidate at all; two copies of this rule
+#: drifted apart once already.
+#: The two confusions must never both be loose at the same time. Allowing a
+#: "1" separator together with a "9" unit made this match 3-1-9 inside
+#: "319.00" and delete the retail price it was meant to protect. So: a real
+#: slash may be followed by a confused unit, and a confused slash must be
+#: followed by a genuine letter.
+PER_UNIT_PRICE = re.compile(
+    r"[0-9OoQDIlisSBGZz.,]+\s*(?:/|PER\s*)\s*(?:GM|GRAM|ML|KG|PCS|PC|[G9QML])\b"
+    r"|[0-9OoQDIlisSBGZz.,]+\s*[1|]\s*(?:GM|GRAM|ML|KG|PCS|PC|[GQML])\b",
+    re.IGNORECASE,
+)
+
+
 def normalize_currency(raw: str) -> NormalizedValue:
     """Normalize an MRP into a two-decimal string.
 
@@ -307,12 +387,11 @@ def normalize_currency(raw: str) -> NormalizedValue:
     # and "180.00 @ 0.72/ml" both print a unit price beside the retail price,
     # and it was being picked instead — the extractor returned 72.00 for a
     # bottle marked 180.00.
-    stripped = re.sub(
-        r"[0-9OoQDIlisSBGZz|.,]+\s*(?:/|PER\s*)\s*(?:G|GM|GRAM|ML|L|KG|N|PC|PCS)",
-        " ",
-        stripped,
-    )
-    stripped = re.sub(r"USP.*", " ", stripped)
+    # The recogniser also welds the two prices into a single token —
+    # "250.00(0.31/9)" — so the unit price has to be removed before the
+    # numbers are pulled out, not filtered afterwards.
+    stripped = PER_UNIT_PRICE.sub(" ", stripped)
+    stripped = re.sub(r"\bUSP\b.*", " ", stripped)
 
     matches = _numeric_runs(stripped)
 

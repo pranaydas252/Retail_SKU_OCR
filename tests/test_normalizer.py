@@ -93,6 +93,51 @@ class TestDateRejection:
         assert normalizer.normalize_date("JAN").value is None
 
 
+class TestOcrArtifactRepair:
+    """Damage the recogniser does to a date that is otherwise readable.
+
+    Every string here was returned by PP-OCRv5 on a real ROI capture.
+    """
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # Slashes recognised as the digit 1: "16/06/2026" came back as
+            # "1610612026" on two separate captures.
+            ("1610612026", "2026-06-16"),
+            ("1610112027", "2027-01-16"),
+            # Two-digit year form.
+            ("1610612 6".replace(" ", ""), "2026-06-16"),
+        ],
+    )
+    def test_slash_recognised_as_one_is_repaired(self, raw, expected):
+        assert normalizer.normalize_date(raw, "day").value == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "9876543210",   # phone number
+            "1234512345",   # month 34 is not a month
+            "4010612026",   # day 40 is not a day
+        ],
+    )
+    def test_repair_does_not_fire_on_non_dates(self, raw):
+        # The repair must not manufacture a date out of a licence or phone
+        # number that happens to be ten digits long.
+        assert normalizer.normalize_date(raw, "day").value is None
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # A lot code running into the expiry date, and a label fragment.
+            ("L409/06/2027", "2027-06-09"),
+            ("B.05/08/2027", "2027-08-05"),
+        ],
+    )
+    def test_letter_prefix_is_stripped(self, raw, expected):
+        assert normalizer.normalize_date(raw, "day").value == expected
+
+
 class TestCurrency:
     @pytest.mark.parametrize(
         "raw,expected",

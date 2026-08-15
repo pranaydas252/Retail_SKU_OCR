@@ -147,7 +147,7 @@ def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
     if value_type == "date":
         return bool(_DATE_HINT.search(text))
     if value_type == "currency":
-        return bool(_NUMBER_HINT.search(text))
+        return _looks_like_price(text)
     if value_type == "code":
         if not _CODE_HINT.search(text):
             return False
@@ -162,6 +162,10 @@ def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
 
 
 # --- spatial association ---------------------------------------------------
+
+
+def _centre_y(token: OcrToken) -> float:
+    return token.y + token.height / 2
 
 
 def _same_line(label: OcrToken, candidate: OcrToken) -> bool:
@@ -179,10 +183,8 @@ def _same_line(label: OcrToken, candidate: OcrToken) -> bool:
     The tolerance scales with the taller box, so it holds at any capture
     distance.
     """
-    label_centre = label.y + label.height / 2
-    candidate_centre = candidate.y + candidate.height / 2
     tallest = max(label.height, candidate.height) or 1
-    return abs(label_centre - candidate_centre) < 0.8 * tallest
+    return abs(_centre_y(label) - _centre_y(candidate)) < 0.8 * tallest
 
 
 def _horizontally_aligned(label: OcrToken, candidate: OcrToken) -> bool:
@@ -209,7 +211,23 @@ def _spatial_score(label: OcrToken, candidate: OcrToken, strategy: str) -> float
         # normal layout rather than evidence of a bad association — sharing a
         # line is itself the strong signal. Penalising distance hard put every
         # correctly-extracted field into REVIEW, which makes the band useless.
-        return max(0.0, 1.0 - gap / 30.0)
+        horizontal = max(0.0, 1.0 - gap / 30.0)
+
+        # Vertical alignment has to be scored too, and for the same reason
+        # that the horizontal term is forgiving: in a two-column label the
+        # values all share an x, so horizontal distance cannot tell one row
+        # from the next. Measured on a real capture, "Mfg. Date:" scored 0.958
+        # against its own value and 0.959 against the row below it, and the
+        # wrong row won by ten pixels of noise — putting the expiry date into
+        # the manufacturing field.
+        #
+        # Scaled by the shorter box, because a label box that swallowed two
+        # printed lines is exactly the case that needs discriminating.
+        pitch = max(min(label.height, candidate.height), 1)
+        offset = abs(_centre_y(candidate) - _centre_y(label)) / pitch
+        vertical = max(0.0, 1.0 - offset / 2.0)
+
+        return horizontal * vertical
 
     gap = max(0, candidate.y - label.bottom) / unit
     # Below-label association is inherently weaker than same-line, so it is
@@ -409,12 +427,49 @@ _PRICE_TOKEN = re.compile(
     # A bare decimal, for stamps that print no currency marker at all. Kept
     # last and still filtered by the per-unit strip and the plausible-price
     # range, or every weight on the pack would look like a price.
-    r"|([0-9]{1,5}\.[0-9]{2})",
+    r"|\b([0-9]{1,5}\.[0-9]{2})\b",
     re.IGNORECASE,
 )
 
-#: Per-unit price. Never the MRP.
-_PER_UNIT = re.compile(r"[0-9.]+\s*(?:/|PER\s*)\s*(?:G|GM|GRAM|ML|L|KG|N|PC)\b", re.IGNORECASE)
+#: Per-unit price. Never the MRP. Shared with the normalizer so the two agree.
+_PER_UNIT = normalizer.PER_UNIT_PRICE
+
+#: "USP" is Unit Sale Price — the per-unit figure's own label, printed on most
+#: Indian FMCG packs right beside it. Anything it introduces is by definition
+#: not the MRP.
+_UNIT_PRICE_LABEL = re.compile(r"\bUSP\b", re.IGNORECASE)
+
+#: Currency markers, which are the only letters allowed to sit inside a price.
+_CURRENCY_MARKER = re.compile(r"RS|INR|MRP|M\.?R\.?P|₹|/-|/=", re.IGNORECASE)
+
+
+def _looks_like_price(text: str) -> bool:
+    """True when a token could be a retail price rather than merely numeric.
+
+    The labelled path used to accept any token containing a digit, which is
+    far too weak: beside an "MRP:" label the extractor accepted the garbage
+    token "6MIS" as 6.00, and the printed date "MAY-26." as 26.00, on real
+    captures. Both are confident wrong values for a core field.
+
+    A price is a number, optionally wrapped in currency markers and
+    punctuation. Once the markers and any per-unit price are removed, no
+    letters may remain — that is what separates "Rs.60.00" and "250.00(0.31/9)"
+    from "MAY-26." and "6MIS", without demanding a decimal point that a pack
+    printing "MRP 245" does not have.
+    """
+    if _UNIT_PRICE_LABEL.search(text):
+        return False
+
+    remainder = _PER_UNIT.sub(" ", text)
+    remainder = _CURRENCY_MARKER.sub(" ", remainder)
+    if not _NUMBER_HINT.search(remainder):
+        return False
+
+    # Only ASCII letters disqualify. The multilingual recogniser prefixes CJK
+    # glyphs to Latin text on dot-matrix and metallic print — it returned
+    # "年319.00（0.639）" for a jar marked 319.00 — and treating those as
+    # letters threw away the price along with the noise.
+    return not any("A" <= char <= "Z" or "a" <= char <= "z" for char in remainder)
 
 
 def _infer_unlabelled(
@@ -450,15 +505,31 @@ def _infer_unlabelled(
 
         without_unit = _PER_UNIT.sub(" ", text)
 
+        date_spans = []
+        for match in _DATE_TOKEN.finditer(without_unit):
+            dates.append((match.group(1), token))
+            date_spans.append(match.span())
+
         for match in _PRICE_TOKEN.finditer(without_unit):
             value = match.group(1) or match.group(2) or match.group(3)
             # A retail pack price sits in a sane range. Outside it the number
             # is a weight, a licence number or a phone number.
-            if value and _numeric(value) and 1.0 <= float(value.replace(",", "")) <= 100000:
-                prices.append((value, token))
-
-        for match in _DATE_TOKEN.finditer(without_unit):
-            dates.append((match.group(1), token))
+            if not value or not _numeric(value):
+                continue
+            if not 1.0 <= float(value.replace(",", "")) <= 100000:
+                continue
+            # A date is not a price. "2.06.2028" contains "2.06", which the
+            # bare-decimal branch reads as two rupees six paise.
+            #
+            # Only the bare-decimal branch is checked. A match carrying a
+            # currency marker or a trailing "/-" has said what it is, and
+            # "M.R.P. Rs. 20.00" must not be discarded because "20.00" also
+            # looks like a day-month pair.
+            if match.group(3):
+                start, end = match.span()
+                if any(start < d_end and d_start < end for d_start, d_end in date_spans):
+                    continue
+            prices.append((value, token))
 
     if "mrp" not in results and prices:
         # Largest wins. A stamp that shows both a pack price and a smaller
