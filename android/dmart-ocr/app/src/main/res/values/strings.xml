@@ -71,7 +71,21 @@
 
 The scan has been saved. You can retry the label or continue without it.</string>
     <string name="print_skip">Continue</string>
-    <string name="print_permission_denied">Bluetooth permission was refused, so the label cannot be printed.</string>
+    <string name="print_permission_title">Bluetooth permission needed</string>
+    <string name="print_permission_body">The label is printed over Bluetooth, so the app needs permission to connect to the printer.</string>
+    <string name="print_permission_settings_body">Bluetooth permission was refused. Enable it in Settings to print labels.
+
+The scan has already been saved.</string>
+    <string name="print_permission_grant">Grant permission</string>
+
+    <string name="result_add_field">Add a field</string>
+    <string name="result_remove_field">Remove field</string>
+    <string name="add_field_title">Add a field</string>
+    <string name="add_field_name_hint">Field name</string>
+    <string name="add_field_value_hint">Value</string>
+    <string name="add_field_name_error">Enter a field name</string>
+    <string name="add_field_duplicate">That field is already on the list</string>
+    <string name="band_added">Added</string>
 
     <!-- Field labels -->
     <string name="field_batch_number">Batch number</string>

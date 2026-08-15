@@ -57,11 +57,24 @@
         <item name="android:textColor">@color/text_tertiary</item>
     </style>
 
+    <!-- Field keys on the confirmation screen.
+         Sentence case at 12sp medium in the secondary colour. The earlier
+         11sp all-caps tertiary caption was effectively invisible next to the
+         value, and the operator needs to know WHICH field they are checking. -->
+    <style name="TextAppearance.DmartOcr.FieldKey" parent="TextAppearance.Material3.LabelMedium">
+        <item name="fontFamily">@font/google_sans</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
     <!-- Extracted values. The one thing on screen read character by character. -->
     <style name="TextAppearance.DmartOcr.Value" parent="TextAppearance.Material3.TitleMedium">
         <item name="fontFamily">@font/google_sans</item>
         <item name="android:fontFamily">@font/google_sans</item>
-        <item name="android:textSize">18sp</item>
+        <item name="android:textSize">17sp</item>
         <item name="android:letterSpacing">-0.005</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
@@ -69,7 +82,7 @@
     <style name="TextAppearance.DmartOcr.BandChip" parent="TextAppearance.Material3.LabelSmall">
         <item name="fontFamily">@font/google_sans</item>
         <item name="android:fontFamily">@font/google_sans</item>
-        <item name="android:textSize">11sp</item>
+        <item name="android:textSize">10sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.04</item>
     </style>

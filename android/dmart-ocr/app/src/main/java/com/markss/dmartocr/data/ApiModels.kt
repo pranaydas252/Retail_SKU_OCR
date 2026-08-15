@@ -39,6 +39,13 @@ data class ExtractedField(
     val band: String = BAND_LOW,
     val source: String = SOURCE_NOT_FOUND,
     val rawValue: String? = null,
+    /**
+     * Human label supplied by the server, so a key this app has never seen
+     * still renders readably. The field set is not fixed.
+     */
+    val displayName: String? = null,
+    /** True for the core fields the POC always asks about. */
+    val expected: Boolean = false,
 ) {
     /** Derived by a rule printed on the pack rather than read from it. */
     val isDerived: Boolean get() = source == SOURCE_DERIVED
@@ -53,6 +60,7 @@ data class ExtractedField(
         const val SOURCE_OCR = "OCR_RULES"
         const val SOURCE_DERIVED = "DERIVED_RULE"
         const val SOURCE_NOT_FOUND = "NOT_FOUND"
+        const val SOURCE_OPERATOR = "OPERATOR"
     }
 }
 

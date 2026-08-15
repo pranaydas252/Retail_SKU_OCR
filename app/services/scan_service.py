@@ -10,6 +10,7 @@ confidence scoring arrive in Phase 2; persistence in Phase 3.
 from __future__ import annotations
 
 import logging
+import re
 
 from app.config import Settings, get_settings
 from app.db import repositories
@@ -269,6 +270,39 @@ def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
     return "|".join(part.upper() for part in ordered)
 
 
+#: Curated labels for the fields the rule extractor knows about.
+_CURATED_LABELS = {
+    "batchNumber": "Batch number",
+    "manufacturingDate": "Manufacturing date",
+    "expiryDate": "Expiry date",
+    "lotCode": "Lot code",
+    "mrp": "MRP",
+}
+
+
+def display_name(key: str) -> str:
+    """Human label for a field key.
+
+    Every field carries one so the app can render a key it has never seen. The
+    field set is deliberately not fixed: a document-understanding model may
+    return whatever a given pack prints — ``netContents``, a licence number, a
+    field nobody predicted — and shipping an Android string per key would make
+    every new field an app release.
+
+    Known keys get a curated label; anything else is humanised from the key,
+    which is wrong far less often than showing a raw identifier.
+    """
+    if key in _CURATED_LABELS:
+        return _CURATED_LABELS[key]
+
+    # camelCase / snake_case / kebab-case -> "Net contents"
+    spaced = re.sub(r"[_-]+", " ", key)
+    spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", spaced).strip()
+    if not spaced:
+        return key
+    return spaced[0].upper() + spaced[1:]
+
+
 def extract_and_score(
     tokens: list[OcrToken],
 ) -> tuple[dict[str, ExtractedField], float | None]:
@@ -303,6 +337,8 @@ def extract_and_score(
                 confidence=0.0,
                 band=confidence.band(0.0),
                 source="NOT_FOUND",
+                displayName=display_name(name),
+                expected=True,
             )
             scores[name] = 0.0
             continue
@@ -321,6 +357,8 @@ def extract_and_score(
             band=confidence.band(score),
             source="DERIVED_RULE" if candidate.strategy == "derived" else "OCR_RULES",
             rawValue=candidate.raw_value,
+            displayName=display_name(name),
+            expected=True,
         )
 
     return fields, confidence.overall(scores, found)

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
 import com.markss.dmartocr.data.AppPreferences
 import com.zebra.sdk.comm.BluetoothConnection
@@ -72,11 +73,12 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
 
             val mac = AppPreferences.printerMac.trim().uppercase(Locale.US)
 
-            if (!hasConnectPermission()) {
+            val missing = missingPermissions()
+            if (missing.isNotEmpty()) {
                 return@withContext PrintResult.Failure(
                     PrintResult.Reason.PERMISSION_DENIED,
                     "Bluetooth permission is required to print.",
-                    retryable = false,
+                    retryable = true,
                 )
             }
 
@@ -130,11 +132,16 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
                 "Could not reach the printer. Check it is on, paired and in range.",
             )
         } catch (e: SecurityException) {
-            Log.e(TAG, "Bluetooth permission denied", e)
+            // Reaching here means a permission was refused mid-call rather than
+            // being absent up front. Report what the system actually said
+            // instead of asserting a cause — the previous version blamed
+            // BLUETOOTH_CONNECT for a BLUETOOTH_SCAN failure, which sent
+            // everyone looking in the wrong place.
+            Log.e(TAG, "Bluetooth call rejected", e)
             PrintResult.Failure(
                 PrintResult.Reason.PERMISSION_DENIED,
-                "Bluetooth permission is required to print.",
-                retryable = false,
+                e.message ?: "Bluetooth access was refused.",
+                retryable = true,
             )
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected print failure", e)
@@ -163,17 +170,33 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
     }
 
     /**
-     * BLUETOOTH_CONNECT became a runtime permission in API 31. Below that the
-     * install-time BLUETOOTH permission covers it, so there is nothing to ask.
+     * Runtime Bluetooth permissions that are still missing.
+     *
+     * Both are needed. BLUETOOTH_CONNECT is obvious. BLUETOOTH_SCAN is not:
+     * this app never discovers devices, but the Link-OS SDK calls
+     * cancelDiscovery() internally while opening a connection and that call is
+     * scan-guarded on API 31+. Omitting it produces a SecurityException naming
+     * a permission the operator cannot connect to anything they did.
+     *
+     * Below API 31 the install-time BLUETOOTH permission covers both, so there
+     * is nothing to ask for.
      */
-    private fun hasConnectPermission(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            ContextCompat.checkSelfPermission(
-                context, Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
+    fun missingPermissions(): List<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return emptyList()
+        return REQUIRED_PERMISSIONS.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+    }
 
     companion object {
         private const val TAG = "BtLabelPrinter"
+
+        /** Runtime permissions needed on API 31+. See [missingPermissions]. */
+        @RequiresApi(Build.VERSION_CODES.S)
+        val REQUIRED_PERMISSIONS = listOf(
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_SCAN,
+        )
         private const val DRAIN_PAUSE_MS = 250L
 
         /** Printed rows, in label order (CLAUDE.md section 18). */

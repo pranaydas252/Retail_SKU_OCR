@@ -62,13 +62,27 @@ class OcrTokenModel(BaseModel):
 
 
 class ExtractedField(BaseModel):
-    """One extracted label field. Populated in Phase 2."""
+    """One extracted label field.
+
+    Field keys are NOT a fixed set. The rule-based extractor emits the five
+    known SKU fields, but a document-understanding model can return whatever
+    key/value pairs a given pack happens to carry — `Net Contents`, a licence
+    number, `Batch No.` under a name nobody predicted.
+
+    `displayName` is what makes that work end to end: the server sends a human
+    label alongside every key, so the app can render a field it has never seen
+    without shipping a translation for it.
+    """
 
     value: str | None = None
     confidence: float = 0.0
     band: ConfidenceBand = ConfidenceBand.LOW
     source: str = "OCR_RULES"
     raw_value: str | None = Field(default=None, alias="rawValue")
+    display_name: str | None = Field(default=None, alias="displayName")
+    #: True for the core fields the POC always asks about, so the app can show
+    #: them as empty rather than omitting them when a pack lacks one.
+    expected: bool = False
 
     model_config = {"populate_by_name": True}
 

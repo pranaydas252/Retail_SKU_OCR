@@ -13,10 +13,25 @@
         install-time permissions are capped at API 30 so they are not requested
         on newer devices, where they no longer exist.
 
-        No BLUETOOTH_SCAN: the printer address is configured by the operator, so
-        the app never discovers devices and therefore never needs location.
+        BLUETOOTH_SCAN is required even though this app never discovers
+        devices. The Link-OS SDK calls AdapterService.cancelDiscovery()
+        internally while opening a connection, and that call is scan-guarded on
+        API 31+. Without this the connection fails with
+
+            SecurityException: Need android.permission.BLUETOOTH_SCAN
+            ... AdapterService cancelDiscovery
+
+        which surfaces as a permission error for a permission that IS granted.
+
+        neverForLocation is declared because we genuinely do not derive location
+        from Bluetooth; it keeps the scan permission from dragging in
+        ACCESS_FINE_LOCATION, which the operator would otherwise be asked for.
     -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="31" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

@@ -127,6 +127,38 @@
                 android:layout_marginTop="20dp"
                 android:orientation="vertical" />
 
+            <!-- OCR will miss things, and the field set is not fixed. The
+                 operator needs a way to record something the server never
+                 returned rather than losing it. -->
+            <LinearLayout
+                android:id="@+id/addFieldButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_add_field"
+                android:baselineAligned="false"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingVertical="14dp">
+
+                <ImageView
+                    android:layout_width="17dp"
+                    android:layout_height="17dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_add"
+                    app:tint="@color/brand_cyan" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:text="@string/result_add_field"
+                    android:textAppearance="@style/TextAppearance.DmartOcr.Title"
+                    android:textColor="@color/brand_cyan" />
+            </LinearLayout>
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

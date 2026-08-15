@@ -16,25 +16,40 @@
     android:fitsSystemWindows="true"
     tools:context=".ui.MainActivity">
 
+    <!--
+        Top bar is a constrained row: logo | server chip | settings.
+
+        The chip is pinned between the other two and given 0dp width, so a long
+        status string compresses and ellipsizes instead of growing across the
+        branding. A wrap_content chip here overlapped the logo the moment the
+        text read "Server unreachable".
+    -->
     <ImageView
         android:id="@+id/logo"
-        android:layout_width="132dp"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="20dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="18dp"
         android:adjustViewBounds="true"
         android:contentDescription="@string/cd_logo"
         android:src="@drawable/logo_markss"
+        app:layout_constraintHorizontal_bias="0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintWidth_max="108dp"
+        app:layout_constraintWidth_percent="0.30" />
 
     <!-- Server state. Placed beside the logo rather than near the button so a
          red state is visible before the operator commits to a scan. -->
     <LinearLayout
         android:id="@+id/serverChip"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
         android:layout_marginEnd="8dp"
+        app:layout_constraintStart_toEndOf="@id/logo"
+        app:layout_constraintHorizontal_bias="1"
+        app:layout_constrainedWidth="true"
         android:background="@drawable/bg_chip_neutral"
         android:gravity="center"
         android:orientation="horizontal"
@@ -51,6 +66,7 @@
             android:layout_height="7dp"
             android:layout_gravity="center_vertical"
             android:layout_marginEnd="7dp"
+            android:minWidth="7dp"
             android:background="@drawable/bg_dot" />
 
         <TextView
@@ -59,7 +75,9 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
             android:gravity="center_vertical"
+            android:ellipsize="end"
             android:includeFontPadding="false"
+            android:maxLines="1"
             android:text="@string/main_server_checking"
             android:textAppearance="@style/TextAppearance.DmartOcr.BandChip"
             android:textColor="@color/text_secondary" />

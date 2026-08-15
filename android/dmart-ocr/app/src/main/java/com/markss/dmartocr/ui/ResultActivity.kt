@@ -3,13 +3,17 @@ package com.markss.dmartocr.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.markss.dmartocr.R
@@ -18,6 +22,7 @@ import com.markss.dmartocr.data.ConfirmRequest
 import com.markss.dmartocr.data.ExtractedField
 import com.markss.dmartocr.data.ScanResponse
 import com.markss.dmartocr.databinding.ActivityResultBinding
+import com.markss.dmartocr.databinding.DialogAddFieldBinding
 import com.markss.dmartocr.databinding.ItemFieldBinding
 import com.markss.dmartocr.device.DeviceId
 import com.markss.dmartocr.print.BluetoothLabelPrinter
@@ -51,28 +56,27 @@ class ResultActivity : AppCompatActivity() {
     private var pendingPrint: Pair<Map<String, String?>, String>? = null
 
     private val requestBluetooth = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
         val pending = pendingPrint
         pendingPrint = null
-        when {
-            pending == null -> Unit
-            granted -> printLabel(pending.first, pending.second)
-            else -> {
-                // The scan is already saved, so a refused permission is not
-                // fatal — it just means no label this time.
-                setBusy(false)
-                showPrintFailure(
-                    PrintResult.Failure(
-                        PrintResult.Reason.PERMISSION_DENIED,
-                        getString(R.string.print_permission_denied),
-                        retryable = false,
-                    ),
-                    pending.first,
-                    pending.second,
-                )
-            }
+        if (pending == null) return@registerForActivityResult
+
+        if (grants.values.all { it }) {
+            printLabel(pending.first, pending.second)
+            return@registerForActivityResult
         }
+
+        setBusy(false)
+
+        // "Don't ask again" leaves shouldShowRequestPermissionRationale false
+        // for a permission the operator never granted. Re-prompting then does
+        // nothing at all, so the only honest next step is Settings.
+        val permanentlyDenied = grants.filterValues { !it }.keys.none {
+            ActivityCompat.shouldShowRequestPermissionRationale(this, it)
+        }
+
+        showPermissionDenied(pending.first, pending.second, permanentlyDenied)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,19 +97,25 @@ class ResultActivity : AppCompatActivity() {
         buildFields()
         updateSummary()
 
+        binding.addFieldButton.setOnClickListener { showAddFieldDialog() }
         binding.retakeButton.setOnClickListener { finish() }
         binding.confirmButton.setOnClickListener { confirm() }
     }
 
+    /**
+     * Renders every field the server returned, whatever its key.
+     *
+     * There is no hard-coded field list. The rule extractor emits five known
+     * keys today, but a document-understanding model returns whatever a pack
+     * actually prints, and a fixed list would silently drop anything new. The
+     * server sends a displayName with each field so a key this app has never
+     * seen still gets a readable label.
+     */
     private fun buildFields() {
-        val inflater = LayoutInflater.from(this)
-
         // Worst first. The values most likely to be wrong must not sit below
         // the fold where a hurried operator will scroll past them.
-        val ordered = FIELD_ORDER
-            .filter { scan.fields.containsKey(it) }
-            .sortedBy { name ->
-                val field = scan.fields[name]!!
+        scan.fields.entries
+            .sortedBy { (_, field) ->
                 when {
                     !field.wasFound -> 0
                     field.band == ExtractedField.BAND_LOW -> 1
@@ -113,29 +123,68 @@ class ResultActivity : AppCompatActivity() {
                     else -> 3
                 }
             }
-
-        ordered.forEach { name ->
-            val field = scan.fields[name]!!
-            val row = ItemFieldBinding.inflate(inflater, binding.fieldContainer, false)
-
-            row.fieldLabel.setText(labelFor(name))
-            row.fieldValue.setText(field.value ?: "")
-            applyBand(row, field)
-
-            // Editing invalidates the band: the server's confidence described
-            // the value it read, not the one the operator just typed. Leaving a
-            // green "clear" chip on an edited field would assert something the
-            // system no longer knows.
-            row.fieldValue.setOnFocusChangeListener { _, hasFocus ->
-                if (!hasFocus) markEdited(row, field)
-            }
-
-            rows[name] = row
-            binding.fieldContainer.addView(row.root)
-        }
+            .forEach { (name, field) -> addRow(name, field) }
     }
 
-    private fun applyBand(row: ItemFieldBinding, field: ExtractedField) {
+    private fun addRow(name: String, field: ExtractedField, userAdded: Boolean = false) {
+        val row = ItemFieldBinding.inflate(
+            LayoutInflater.from(this), binding.fieldContainer, false
+        )
+
+        row.fieldLabel.text = field.displayName ?: humanise(name)
+        row.fieldValue.setText(field.value ?: "")
+        applyBand(row, field, userAdded)
+
+        if (userAdded) {
+            // Only rows the operator created can be removed. Deleting a field
+            // the server returned would hide evidence rather than correct it;
+            // clearing its value already says "not on this pack".
+            row.removeButton.visibility = View.VISIBLE
+            row.removeButton.setOnClickListener {
+                binding.fieldContainer.removeView(row.root)
+                rows.remove(name)
+                updateSummary()
+            }
+        }
+
+        // Editing invalidates the band: the server's confidence described the
+        // value it read, not the one the operator just typed. Leaving a green
+        // "clear" chip on an edited field would assert something the system no
+        // longer knows.
+        row.fieldValue.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) markEdited(row, field)
+        }
+
+        rows[name] = row
+        binding.fieldContainer.addView(row.root)
+    }
+
+    /** Fallback label when the server sends a key without a display name. */
+    private fun humanise(key: String): String {
+        val spaced = key
+            .replace(Regex("[_-]+"), " ")
+            .replace(Regex("(?<=[a-z0-9])(?=[A-Z])"), " ")
+            .trim()
+        return spaced.replaceFirstChar { it.uppercase() }
+    }
+
+    private fun applyBand(
+        row: ItemFieldBinding,
+        field: ExtractedField,
+        userAdded: Boolean = false,
+    ) {
+        if (userAdded) {
+            // Operator-entered values carry no OCR confidence, so a band would
+            // be meaningless. Marked as theirs instead.
+            val added = ContextCompat.getColor(this, R.color.brand_cyan)
+            row.bandRail.setBackgroundColor(added)
+            row.bandChip.setBackgroundResource(R.drawable.bg_chip_neutral)
+            row.bandChip.setTextColor(added)
+            row.bandChip.setText(R.string.band_added)
+            row.fieldNote.visibility = View.GONE
+            return
+        }
+
         val (colorRes, chipBg, chipText) = when {
             !field.wasFound -> Triple(
                 R.color.band_low, R.drawable.bg_chip_low, R.string.band_low
@@ -184,8 +233,8 @@ class ResultActivity : AppCompatActivity() {
     }
 
     private fun updateSummary() {
-        val needingReview = scan.fields.count { (_, field) ->
-            !field.wasFound || field.band != ExtractedField.BAND_HIGH
+        val needingReview = scan.fields.count { (name, field) ->
+            rows.containsKey(name) && (!field.wasFound || field.band != ExtractedField.BAND_HIGH)
         }
 
         if (needingReview == 0) {
@@ -212,6 +261,59 @@ class ResultActivity : AppCompatActivity() {
                 ContextCompat.getColor(this, R.color.band_review)
             )
         }
+    }
+
+    private fun showAddFieldDialog() {
+        val dialogBinding = DialogAddFieldBinding.inflate(LayoutInflater.from(this))
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.add_field_title)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.settings_save, null)
+            .setNegativeButton(R.string.settings_cancel, null)
+            .setBackground(ContextCompat.getDrawable(this, R.drawable.bg_dialog))
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val label = dialogBinding.nameInput.text?.toString()?.trim().orEmpty()
+                val value = dialogBinding.valueInput.text?.toString()?.trim().orEmpty()
+
+                dialogBinding.nameLayout.error = null
+                if (label.isEmpty()) {
+                    dialogBinding.nameLayout.error = getString(R.string.add_field_name_error)
+                    return@setOnClickListener
+                }
+
+                val key = toKey(label)
+                if (rows.containsKey(key)) {
+                    dialogBinding.nameLayout.error = getString(R.string.add_field_duplicate)
+                    return@setOnClickListener
+                }
+
+                addRow(
+                    key,
+                    ExtractedField(
+                        value = value.ifEmpty { null },
+                        source = ExtractedField.SOURCE_OPERATOR,
+                        displayName = label,
+                    ),
+                    userAdded = true,
+                )
+                dialog.dismiss()
+                binding.scroll.post { binding.scroll.fullScroll(View.FOCUS_DOWN) }
+            }
+        }
+
+        dialog.show()
+    }
+
+    /** "Net contents" becomes "netContents", matching server key style. */
+    private fun toKey(label: String): String {
+        val parts = label.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return label
+        return parts.first().lowercase() +
+            parts.drop(1).joinToString("") { p -> p.replaceFirstChar { it.uppercase() } }
     }
 
     private fun confirm() {
@@ -281,15 +383,13 @@ class ResultActivity : AppCompatActivity() {
             return
         }
 
-        // BLUETOOTH_CONNECT is a runtime permission from API 31. Asked here,
-        // at the moment it is actually needed, rather than up front on a screen
-        // that may never print.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        // Ask for whatever is still missing, at the moment it is needed rather
+        // than up front on a screen that may never print. The printer owns the
+        // list because it knows what the SDK actually calls.
+        val missing = (printer as? BluetoothLabelPrinter)?.missingPermissions().orEmpty()
+        if (missing.isNotEmpty()) {
             pendingPrint = values to qrPayload
-            requestBluetooth.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            requestBluetooth.launch(missing.toTypedArray())
             return
         }
 
@@ -326,6 +426,46 @@ class ResultActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * A refused permission must offer a way forward.
+     *
+     * The scan is already saved, so continuing is safe — but an operator has no
+     * way to know that a label needs a permission they denied, let alone where
+     * to change it. Retry re-prompts; once "don't ask again" has been chosen,
+     * only Settings can help, so that is what is offered.
+     */
+    private fun showPermissionDenied(
+        values: Map<String, String?>,
+        qrPayload: String,
+        permanentlyDenied: Boolean,
+    ) {
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.print_permission_title)
+            .setMessage(
+                if (permanentlyDenied) R.string.print_permission_settings_body
+                else R.string.print_permission_body
+            )
+            .setNegativeButton(R.string.print_skip) { _, _ -> finish() }
+
+        if (permanentlyDenied) {
+            builder.setPositiveButton(R.string.scan_permission_settings) { _, _ ->
+                startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", packageName, null),
+                    )
+                )
+            }
+        } else {
+            builder.setPositiveButton(R.string.print_permission_grant) { _, _ ->
+                setBusy(true)
+                printLabel(values, qrPayload)
+            }
+        }
+
+        builder.show()
+    }
+
     private fun showPrintFailure(
         failure: PrintResult.Failure,
         values: Map<String, String?>,
@@ -354,14 +494,6 @@ class ResultActivity : AppCompatActivity() {
         )
     }
 
-    private fun labelFor(field: String): Int = when (field) {
-        "batchNumber" -> R.string.field_batch_number
-        "manufacturingDate" -> R.string.field_manufacturing_date
-        "expiryDate" -> R.string.field_expiry_date
-        "lotCode" -> R.string.field_lot_code
-        "mrp" -> R.string.field_mrp
-        else -> R.string.field_batch_number
-    }
 
     companion object {
         private const val TAG = "ResultActivity"
@@ -373,14 +505,6 @@ class ResultActivity : AppCompatActivity() {
             encodeDefaults = true
         }
 
-        /** Display order before confidence sorting is applied. */
-        private val FIELD_ORDER = listOf(
-            "batchNumber",
-            "manufacturingDate",
-            "expiryDate",
-            "lotCode",
-            "mrp",
-        )
 
         // Serializers passed explicitly: inside a companion object the bare
         // call resolves to the member overload that expects a
