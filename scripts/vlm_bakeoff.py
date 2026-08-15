@@ -28,6 +28,12 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import io  # noqa: E402
+
+from PIL import Image  # noqa: E402
+
+from app.services import normalizer  # noqa: E402
+
 OLLAMA = "http://127.0.0.1:11434/api/generate"
 TRUTH = Path("sample_data/roi_labels.json")
 
@@ -35,24 +41,92 @@ TRUTH = Path("sample_data/roi_labels.json")
 # already produces, and forbids guessing. "Not printed" has to be answerable,
 # because a pack that genuinely lacks an MRP is a real case and inventing one
 # is the worst failure class in this project.
-PROMPT = """You are reading a photograph of a printed product label from an Indian retail pack.
+PROMPT = """You are reading the statutory declaration panel on an Indian retail
+product pack — a snack, food, beverage, medicine or household item photographed
+in a store. The text may be an inkjet dot-matrix stamp on curved, glossy or
+metallic packaging, and may be rotated or upside down.
 
-Extract ONLY what is actually printed. Do not infer, calculate or guess.
+Return ONLY these five values as strict JSON:
 
-Return strict JSON with exactly these keys:
-{"batchNumber": ..., "manufacturingDate": ..., "expiryDate": ..., "lotCode": ..., "mrp": ...}
+{"batchNumber": null, "manufacturingDate": null, "expiryDate": null, "lotCode": null, "mrp": null}
 
-Rules:
-- Use null for any field not printed on this label.
-- Dates: return YYYY-MM-DD if a day is printed, otherwise YYYY-MM.
-- mrp: the maximum retail price as a plain number like "232.00". Ignore any
-  per-gram or per-ml unit price such as "0.30/g".
-- batchNumber / lotCode: copy the code exactly as printed.
-- Return the JSON object only, with no commentary."""
+WHAT TO READ
+- batchNumber — printed after BATCH / BATCH NO / B.NO / BN. Copy exactly.
+- lotCode — printed after LOT / LOT NO. Copy exactly. If the pack prints a
+  single combined "Lot / Batch No.", put it in batchNumber and leave lotCode null.
+- manufacturingDate — MFG / MFD / PKD / PACKED / MANUFACTURED / DATE OF PACKAGING.
+- expiryDate — EXP / EXPIRY / USE BY / USE BEFORE / BEST BEFORE.
+- mrp — the maximum retail price.
+
+WHAT TO IGNORE COMPLETELY
+Ingredients, nutrition tables, marketing copy, addresses, customer care and
+toll-free numbers, websites, email addresses, FSSAI and licence numbers, GTIN
+and barcode digits, net weight or volume, and recycling or veg/non-veg marks.
+None of these are ever an answer.
+
+TRAPS THAT MATTER
+- Unit price. Packs print the retail price beside a per-unit price, e.g.
+  "Rs.60.00  Rs.0.30/g" or "₹319.00 (₹0.63/g)". The MRP is the LARGER figure.
+  Anything followed by /g, /gm, /ml, /kg or "per g" is NOT the MRP.
+- "(Inclusive of all taxes)" is boilerplate beside the price, never a value.
+- Some packs print no field names at all — just a bare stamp such as
+  "₹190/- ₹0.25/g SB3114C 08/10/25 07/10/26". When there are two dates and no
+  labels, the EARLIER is manufacturing and the LATER is expiry.
+- A shelf life such as "BEST BEFORE 9 MONTHS FROM PACKAGING" is not a date.
+  Leave expiryDate null; do not calculate it.
+
+OUTPUT FORMAT
+- Dates: "YYYY-MM-DD" when a day is printed, otherwise "YYYY-MM". Indian packs
+  are day-first, so 03/06/2026 is 3 June 2026.
+- mrp: plain number as a string, two decimals, no currency symbol: "232.00".
+- Use null for anything not printed on this pack. A missing value is correct
+  and useful; a guessed one is a serious error. Never invent or calculate.
+
+Return the JSON object only, with no commentary."""
+
+
+#: Longest side sent to the model.
+#:
+#: A vision model encodes a large image as thousands of tokens, and on CPU that
+#: dominates the run time. Measured on one capture: 2692px took 242s, 1600px
+#: 77s and 1100px 58s, with identical output every time. Sending the full crop
+#: was paying four minutes for nothing.
+MAX_SIDE = 1100
 
 
 def encode(path: Path) -> str:
-    return base64.b64encode(path.read_bytes()).decode("ascii")
+    image = Image.open(path)
+    image.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, "JPEG", quality=92)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def normalize(field: str, value) -> str | None:
+    """Put the model's answer into the server's own format.
+
+    The model reads correctly but formats however it likes — it returned
+    "03-06-2026" for a date the pipeline expresses as "2026-06-03". Scoring
+    raw strings marked those wrong and made a model that had read the label
+    perfectly look like it had failed.
+
+    Normalizing here uses the same code the rule pipeline uses, so the model
+    is judged on what it read rather than on how it chose to punctuate it.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"null", "none", "n/a", "-"}:
+        return None
+
+    if field.endswith("Date"):
+        result = normalizer.normalize_date(text, "day")
+    elif field == "mrp":
+        result = normalizer.normalize_currency(text)
+    else:
+        result = normalizer.normalize_code(text)
+
+    return result.value if result.ok else text
 
 
 def ask(model: str, image: Path, timeout: int) -> tuple[dict, float]:
@@ -62,9 +136,16 @@ def ask(model: str, image: Path, timeout: int) -> tuple[dict, float]:
         "images": [encode(image)],
         "stream": False,
         "format": "json",
-        # Deterministic: this is a measurement, and sampling would make the
-        # number unrepeatable.
-        "options": {"temperature": 0, "num_predict": 400},
+        "options": {
+            # Deterministic: this is a measurement, and sampling would make
+            # the number unrepeatable.
+            "temperature": 0,
+            "num_predict": 400,
+            # A label image is worth several thousand vision tokens on its
+            # own. With the default 4096 window the image plus the prompt
+            # overflowed and Ollama returned 400 before running anything.
+            "num_ctx": 8192,
+        },
     }).encode()
 
     request = urllib.request.Request(
@@ -117,9 +198,7 @@ def main() -> int:
         outcomes = {}
 
         for field, want in entry["expected"].items():
-            actual = got.get(field)
-            if isinstance(actual, str) and not actual.strip():
-                actual = None
+            actual = normalize(field, got.get(field))
 
             if want is None:
                 if actual is None:
