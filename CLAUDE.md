@@ -1233,16 +1233,28 @@ A simple sequential server is acceptable for the initial R&D implementation.
 
 Measure accuracy at the **field level**, not just generic OCR character accuracy.
 
-Track at least:
+### Two tiers, deliberately
 
-| Field | Metric |
-| --- | --- |
-| Batch | Exact/normalized match accuracy |
-| MFG | Date accuracy |
-| EXP | Date accuracy |
-| LOT | Exact/normalized match accuracy |
-| MRP | Numeric accuracy |
-| Overall | All required fields correct |
+The five fields are not equally recoverable, and holding them to one number hides the only figure that matters commercially.
+
+**Core fields — MRP, manufacturing date, expiry date. Target 95%+.**
+
+They have a fixed shape: a currency amount, a calendar date. A recogniser has structure to check itself against, a wrong reading is often self-evidently wrong, and normalization can repair formatting. They are also printed on essentially every pack, so they are the fields an operator would otherwise retype every time.
+
+**Code fields — batch number, lot code. Best effort.**
+
+Arbitrary alphanumeric strings with no format and no redundancy. One misread character fails the field, and nothing in the value can reveal the error. Operator entry is the expected path here, not a failure of the system.
+
+Report the two tiers separately. A blended figure lets a good code-field result mask a bad MRP, and the reverse.
+
+| Field | Tier | Metric |
+| --- | --- | --- |
+| MRP | Core | Numeric accuracy |
+| MFG | Core | Date accuracy |
+| EXP | Core | Date accuracy |
+| Batch | Code | Exact/normalized match accuracy |
+| LOT | Code | Exact/normalized match accuracy |
+| Overall | — | Core and code reported separately, never blended |
 
 Also track:
 

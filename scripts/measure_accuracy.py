@@ -41,6 +41,25 @@ DEFAULT_GROUND_TRUTH = "sample_data/roi_labels.json"
 
 CORRECT, WRONG, MISSED, FALSE_ACCEPT = "correct", "wrong", "missed", "false accept"
 
+#: Two accuracy tiers, because the fields are not equally recoverable.
+#:
+#: MRP, manufacturing date and expiry date have a fixed shape - a currency
+#: amount, a calendar date - so a recogniser has structure to check itself
+#: against and a wrong reading is often self-evidently wrong. They are also
+#: printed on essentially every pack. These carry the real target.
+#:
+#: Batch and lot codes are arbitrary alphanumeric strings with no format and no
+#: redundancy: one misread character fails the field and nothing in the value
+#: can reveal it. They are best-effort, with operator entry the expected path
+#: rather than a failure.
+CORE_FIELDS = ("mrp", "manufacturingDate", "expiryDate")
+CODE_FIELDS = ("batchNumber", "lotCode")
+
+
+def tier_of(field: str) -> str:
+    return "core" if field in CORE_FIELDS else "code"
+
+
 
 def compare(expected: str | None, actual: str | None) -> str | None:
     """Classify one field. None means the field was not scored."""
@@ -143,6 +162,23 @@ def main() -> int:
         f"{'OVERALL':22s} {scored[CORRECT]:8d} {scored[WRONG]:7d} "
         f"{scored[MISSED]:7d} {scored[FALSE_ACCEPT]:7d} {overall:6.0%}"
     )
+    # Reported separately. A single blended figure hides the only number that
+    # matters commercially: whether the three always-present fields are
+    # trustworthy enough for the operator to skip retyping them.
+    print()
+    for tier, fields in (("CORE (mrp, mfg, exp)", CORE_FIELDS),
+                         ("CODES (batch, lot)", CODE_FIELDS)):
+        tier_counts = Counter()
+        for name in fields:
+            tier_counts.update(per_field.get(name, Counter()))
+        tried = tier_counts["correct"] + tier_counts["wrong"] + tier_counts["missed"]
+        if not tried:
+            continue
+        print(
+            f"{tier:24s} {tier_counts['correct']:3d} correct  "
+            f"{tier_counts['wrong']:3d} wrong  {tier_counts['missed']:3d} missed  "
+            f"{tier_counts['false accept']:3d} false+  -> {tier_counts['correct'] / tried:.0%}"
+        )
     print(f"\n{len(rows)} images, {total_time / max(1, len(rows)):.1f}s/image")
 
     if false_accepts:
