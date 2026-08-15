@@ -172,8 +172,11 @@ class ResultActivity : AppCompatActivity() {
             width = 0
             height = ViewGroup.LayoutParams.WRAP_CONTENT
             columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-            val gap = (4 * resources.displayMetrics.density).toInt()
-            setMargins(gap, 0, gap, 0)
+            // Half the gutter each side, so the space between two cards
+            // matches the space between rows.
+            val h = (5 * resources.displayMetrics.density).toInt()
+            val v = (5 * resources.displayMetrics.density).toInt()
+            setMargins(h, v, h, v)
         }
 
     /** Fallback label when the server sends a key without a display name. */
@@ -193,59 +196,60 @@ class ResultActivity : AppCompatActivity() {
         if (userAdded) {
             // Operator-entered values carry no OCR confidence, so a band would
             // be meaningless. Marked as theirs instead.
-            val added = ContextCompat.getColor(this, R.color.brand_cyan)
-            row.bandRail.setBackgroundColor(added)
-            row.bandChip.setBackgroundResource(R.drawable.bg_chip_neutral)
-            row.bandChip.setTextColor(added)
-            row.bandChip.setText(R.string.band_added)
-            row.fieldNote.visibility = View.GONE
+            row.bandDot.setBackgroundResource(R.drawable.dot_neutral)
+            setNote(row, R.string.note_added, R.color.brand_cyan)
             return
         }
 
-        val (colorRes, chipBg, chipText) = when {
+        val (dot, note, colour) = when {
             !field.wasFound -> Triple(
-                R.color.band_low, R.drawable.bg_chip_low, R.string.band_low
+                R.drawable.dot_low, R.string.note_missing, R.color.band_low
+            )
+
+            field.isDerived -> Triple(
+                R.drawable.dot_review, R.string.note_derived, R.color.band_review
             )
 
             field.band == ExtractedField.BAND_HIGH -> Triple(
-                R.color.band_high, R.drawable.bg_chip_high, R.string.band_high
+                R.drawable.dot_high, 0, R.color.band_high
             )
 
             field.band == ExtractedField.BAND_REVIEW -> Triple(
-                R.color.band_review, R.drawable.bg_chip_review, R.string.band_review
+                R.drawable.dot_review, R.string.note_check, R.color.band_review
             )
 
-            else -> Triple(R.color.band_low, R.drawable.bg_chip_low, R.string.band_low)
+            else -> Triple(R.drawable.dot_low, R.string.note_verify, R.color.band_low)
         }
 
-        val color = ContextCompat.getColor(this, colorRes)
-        row.bandRail.setBackgroundColor(color)
-        row.bandChip.setBackgroundResource(chipBg)
-        row.bandChip.setTextColor(color)
-        row.bandChip.setText(chipText)
+        row.bandDot.setBackgroundResource(dot)
+        setNote(row, note, colour)
+    }
 
-        // A derived expiry is not a reading — it is arithmetic on a shelf life
-        // printed elsewhere on the pack. Say so, because the operator is being
-        // asked to vouch for it.
-        if (field.isDerived) {
-            row.fieldNote.visibility = View.VISIBLE
-            row.fieldNote.setText(R.string.result_derived)
-            row.fieldNote.setTextColor(ContextCompat.getColor(this, R.color.band_review))
-        } else {
+    /**
+     * A clear field says nothing; a doubtful one says why in words.
+     *
+     * Keeping the quiet case quiet is what makes the noisy case readable — if
+     * every card carried a status line, none of them would register.
+     */
+    private fun setNote(row: ItemFieldBinding, textRes: Int, colourRes: Int) {
+        if (textRes == 0) {
             row.fieldNote.visibility = View.GONE
+            return
         }
+        row.fieldNote.visibility = View.VISIBLE
+        row.fieldNote.setText(textRes)
+        row.fieldNote.setTextColor(ContextCompat.getColor(this, colourRes))
     }
 
     private fun markEdited(row: ItemFieldBinding, original: ExtractedField) {
         val current = row.fieldValue.text?.toString()?.trim().orEmpty()
-        val unchanged = current == (original.value ?: "")
-        if (unchanged) return
+        if (current == (original.value ?: "")) return
 
-        val color = ContextCompat.getColor(this, R.color.brand_cyan)
-        row.bandRail.setBackgroundColor(color)
-        row.bandChip.setBackgroundResource(R.drawable.bg_chip_neutral)
-        row.bandChip.setTextColor(color)
-        row.bandChip.text = getString(R.string.band_review)
+        // The server's confidence described the value it read, not the one the
+        // operator just typed. Leaving the old band would assert something the
+        // system no longer knows.
+        row.bandDot.setBackgroundResource(R.drawable.dot_neutral)
+        setNote(row, R.string.note_edited, R.color.brand_cyan)
         updateSummary()
     }
 
@@ -515,6 +519,26 @@ class ResultActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ResultActivity"
         const val EXTRA_SCAN_JSON = "scan_json"
+
+        /** Representative data for the debug-only preview. Real values from a
+         *  captured can and a peanut butter jar, including a missing field and
+         *  an unexpected key, so the layout is exercised honestly. */
+        val SAMPLE_JSON: String = """
+            {"scanId":"SCAN-000069","status":"COMPLETED","overallConfidence":0.72,
+             "persisted":true,"fields":{
+              "batchNumber":{"value":"GSB0134","confidence":0.96,"band":"HIGH",
+                "source":"OCR_RULES","displayName":"Batch number","expected":true},
+              "manufacturingDate":{"value":"2024-11","confidence":0.88,"band":"REVIEW",
+                "source":"OCR_RULES","displayName":"Manufacturing date","expected":true},
+              "expiryDate":{"value":"2026-10","confidence":0.97,"band":"HIGH",
+                "source":"OCR_RULES","displayName":"Expiry date","expected":true},
+              "lotCode":{"value":null,"confidence":0.0,"band":"LOW",
+                "source":"NOT_FOUND","displayName":"Lot code","expected":true},
+              "mrp":{"value":"232.00","confidence":0.99,"band":"HIGH",
+                "source":"OCR_RULES","displayName":"MRP","expected":true},
+              "netContents":{"value":"510 g","confidence":0.9,"band":"REVIEW",
+                "source":"OCR_RULES","displayName":"Net contents","expected":false}}}
+        """.trimIndent()
 
         private val json = Json {
             ignoreUnknownKeys = true

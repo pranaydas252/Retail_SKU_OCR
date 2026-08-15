@@ -39,6 +39,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:includeFontPadding="false"
                 android:text="@string/result_title"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Display" />
 

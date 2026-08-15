@@ -58,7 +58,7 @@
     <string name="result_scan_id">Scan %1$s</string>
     <string name="result_confirm">Confirm and save</string>
     <string name="result_retake">Retake</string>
-    <string name="result_not_found">Not found — enter manually</string>
+    <string name="result_not_found">Enter value</string>
     <string name="result_unsaved">Not saved to the server. Confirming will fail until it is reachable.</string>
     <string name="result_saved">Saved</string>
     <string name="result_saving">Saving…</string>
@@ -97,10 +97,13 @@ The scan has already been saved.</string>
     <string name="field_lot_code">Lot code</string>
     <string name="field_mrp">MRP</string>
 
-    <!-- Bands -->
-    <string name="band_high">Clear</string>
-    <string name="band_review">Check</string>
-    <string name="band_low">Verify</string>
+    <!-- Reason lines. Present only when there is something to say. -->
+    <string name="note_check">Check against the pack</string>
+    <string name="note_verify">Low confidence — verify</string>
+    <string name="note_missing">Not on the pack? Leave blank</string>
+    <string name="note_derived">Calculated from the shelf life</string>
+    <string name="note_edited">Edited</string>
+    <string name="note_added">You added this</string>
 
     <!-- Content descriptions -->
     <string name="cd_logo">Markss Infotech</string>

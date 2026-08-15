@@ -6,8 +6,13 @@
     going to rebuild an APK to set: the backend address and the printer's
     Bluetooth MAC.
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true">
+
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -103,3 +108,5 @@
         android:visibility="gone" />
 
 </LinearLayout>
+
+</ScrollView>

@@ -127,13 +127,14 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:includeFontPadding="false"
                 android:text="@string/main_title"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Display" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="10dp"
                 android:text="@string/main_subtitle"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Body" />
 
@@ -156,8 +157,8 @@
                     android:layout_gravity="center"
                     android:background="@drawable/bg_field"
                     android:orientation="vertical"
-                    android:paddingHorizontal="22dp"
-                    android:paddingVertical="18dp">
+                    android:paddingHorizontal="30dp"
+                    android:paddingVertical="24dp">
 
                     <include
                         layout="@layout/item_hero_row"

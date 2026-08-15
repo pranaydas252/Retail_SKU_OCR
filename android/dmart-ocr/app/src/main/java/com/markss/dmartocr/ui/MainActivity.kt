@@ -7,6 +7,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.markss.dmartocr.BuildConfig
 import com.markss.dmartocr.R
 import com.markss.dmartocr.data.ApiClient
 import com.markss.dmartocr.databinding.ActivityMainBinding
@@ -37,6 +38,22 @@ class MainActivity : AppCompatActivity() {
                 // Re-probe immediately: the operator changed the address
                 // precisely because they think the old one was wrong.
                 checkServer()
+            }
+        }
+
+        if (BuildConfig.DEBUG) {
+            // Debug-only: opens the confirmation screen with representative
+            // data. The scan flow needs a readable label in front of the
+            // camera, which makes iterating on this screen's layout slow and
+            // makes verifying it before a release impossible. Never present in
+            // a release build.
+            binding.logo.setOnLongClickListener {
+                startActivity(
+                    Intent(this, ResultActivity::class.java).apply {
+                        putExtra(ResultActivity.EXTRA_SCAN_JSON, ResultActivity.SAMPLE_JSON)
+                    }
+                )
+                true
             }
         }
 

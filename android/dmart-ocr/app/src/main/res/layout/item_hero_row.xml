@@ -9,11 +9,11 @@
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingVertical="7dp">
+    android:paddingVertical="8dp">
 
     <View
-        android:layout_width="46dp"
-        android:layout_height="7dp"
+        android:layout_width="54dp"
+        android:layout_height="8dp"
         android:background="@drawable/bg_bar_muted" />
 
     <View
@@ -21,8 +21,8 @@
         android:layout_height="1dp" />
 
     <View
-        android:layout_width="76dp"
-        android:layout_height="7dp"
+        android:layout_width="92dp"
+        android:layout_height="8dp"
         android:background="@drawable/bg_bar_brand" />
 
 </LinearLayout>

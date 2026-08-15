@@ -65,16 +65,26 @@
         <item name="fontFamily">@font/google_sans</item>
         <item name="android:fontFamily">@font/google_sans</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textSize">12sp</item>
-        <item name="android:letterSpacing">0.01</item>
+        <item name="android:textSize">11.5sp</item>
+        <item name="android:letterSpacing">0.005</item>
+        <item name="android:lineSpacingMultiplier">1.05</item>
         <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <!-- Reason line under a doubtful value. Small, in the band colour, and
+         only ever present when there is something to say. -->
+    <style name="TextAppearance.DmartOcr.FieldNote" parent="TextAppearance.Material3.LabelSmall">
+        <item name="fontFamily">@font/google_sans</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0</item>
     </style>
 
     <!-- Extracted values. The one thing on screen read character by character. -->
     <style name="TextAppearance.DmartOcr.Value" parent="TextAppearance.Material3.TitleMedium">
         <item name="fontFamily">@font/google_sans</item>
         <item name="android:fontFamily">@font/google_sans</item>
-        <item name="android:textSize">17sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:letterSpacing">-0.005</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
