@@ -386,7 +386,168 @@ def extract_fields(tokens: list[OcrToken]) -> dict[str, FieldCandidate]:
             results[spec.name] = candidates[0]
 
     _derive_relative_expiry(tokens, results)
+    _infer_unlabelled(tokens, results)
     return results
+
+
+# A bare inkjet stamp: a price, sometimes a per-unit price, two dates and a
+# code, printed with no field names at all. Roughly a third of captured packs
+# look like this, so the three fields that are always present — MRP,
+# manufacturing date and expiry date — have to be recoverable without a label.
+_DATE_TOKEN = re.compile(
+    r"\b(\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{2,4}"
+    r"|\d{1,2}\s*[/.\-]\s*\d{2,4}"
+    r"|\d{1,2}\s*[A-Z]{3,9}\s*\d{2,4})\b",
+    re.IGNORECASE,
+)
+
+#: A price carries a currency marker or a trailing /-; a bare number does not
+#: qualify, or every quantity on the pack would look like a price.
+_PRICE_TOKEN = re.compile(
+    r"(?:RS\.?|INR|₹|MRP)\s*:?\s*([0-9][0-9,]*(?:\.\d{1,2})?)"
+    r"|([0-9][0-9,]*(?:\.\d{1,2})?)\s*/-"
+    # A bare decimal, for stamps that print no currency marker at all. Kept
+    # last and still filtered by the per-unit strip and the plausible-price
+    # range, or every weight on the pack would look like a price.
+    r"|([0-9]{1,5}\.[0-9]{2})",
+    re.IGNORECASE,
+)
+
+#: Per-unit price. Never the MRP.
+_PER_UNIT = re.compile(r"[0-9.]+\s*(?:/|PER\s*)\s*(?:G|GM|GRAM|ML|L|KG|N|PC)\b", re.IGNORECASE)
+
+
+def _infer_unlabelled(
+    tokens: list[OcrToken], results: dict[str, FieldCandidate]
+) -> None:
+    """Recover MRP and the two dates from a stamp that carries no field names.
+
+    Only fills fields the labelled pass could not find, so a pack that does
+    print "Batch No." is never overridden by a guess.
+
+    Two conventions do the work, both near-universal on Indian FMCG stamps:
+
+    * Of two dates, the earlier is manufacture and the later is expiry. A pack
+      does not expire before it is made, so ordering is safe where labels are
+      not.
+    * A price carries a currency marker or a trailing "/-", and a per-unit
+      price is excluded first. Without that, "0.25/g" outbids the real MRP.
+
+    Everything inferred here is marked so confidence reflects that it was
+    positional rather than read from a label.
+    """
+    wanted = {"mrp", "manufacturingDate", "expiryDate"}
+    if wanted.issubset(results.keys()):
+        return
+
+    dates: list[tuple[str, OcrToken]] = []
+    prices: list[tuple[str, OcrToken]] = []
+
+    for token in tokens:
+        text = _split_run_together_dates(token.text)
+        if _canonical(text) in _BOILERPLATE:
+            continue
+
+        without_unit = _PER_UNIT.sub(" ", text)
+
+        for match in _PRICE_TOKEN.finditer(without_unit):
+            value = match.group(1) or match.group(2) or match.group(3)
+            # A retail pack price sits in a sane range. Outside it the number
+            # is a weight, a licence number or a phone number.
+            if value and _numeric(value) and 1.0 <= float(value.replace(",", "")) <= 100000:
+                prices.append((value, token))
+
+        for match in _DATE_TOKEN.finditer(without_unit):
+            dates.append((match.group(1), token))
+
+    if "mrp" not in results and prices:
+        # Largest wins. A stamp that shows both a pack price and a smaller
+        # figure is showing a unit or promotional price alongside the MRP.
+        raw, token = max(
+            prices,
+            key=lambda p: float(p[0].replace(",", "")) if _numeric(p[0]) else -1,
+        )
+        normalized = normalizer.normalize_currency(raw)
+        if normalized.ok:
+            results["mrp"] = _inferred("mrp", raw, normalized, token)
+
+    parsed: list[tuple[str, str, OcrToken]] = []
+    for raw, token in dates:
+        normalized = normalizer.normalize_date(raw, "day")
+        if normalized.ok and normalized.value:
+            parsed.append((normalized.value, raw, token))
+
+    # Distinct dates only: the same stamp read twice is not two dates.
+    seen: set[str] = set()
+    unique = [p for p in parsed if not (p[0] in seen or seen.add(p[0]))]
+    unique.sort(key=lambda p: p[0])
+
+    if len(unique) >= 2:
+        earliest, latest = unique[0], unique[-1]
+        if "manufacturingDate" not in results:
+            results["manufacturingDate"] = _inferred(
+                "manufacturingDate", earliest[1],
+                normalizer.NormalizedValue(earliest[0], is_ambiguous=True,
+                                           notes=["inferred: earlier of two printed dates"]),
+                earliest[2],
+            )
+        if "expiryDate" not in results:
+            results["expiryDate"] = _inferred(
+                "expiryDate", latest[1],
+                normalizer.NormalizedValue(latest[0], is_ambiguous=True,
+                                           notes=["inferred: later of two printed dates"]),
+                latest[2],
+            )
+
+
+#: Two dates printed with no gap between them. Inkjet stamps run fields
+#: together often enough that OCR returns "22/06/2621/03/27" as one token, and
+#: a greedy date match then reads the year as 2621.
+_RUN_TOGETHER = re.compile(
+    r"(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2})(?=\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2})"
+)
+
+
+def _split_run_together_dates(text: str) -> str:
+    """Insert a separator between two dates printed with no gap."""
+    return _RUN_TOGETHER.sub(r" ", text)
+
+
+def _numeric(value: str) -> bool:
+    try:
+        float(value.replace(",", ""))
+        return True
+    except ValueError:
+        return False
+
+
+def _inferred(
+    field: str,
+    raw: str,
+    normalized: normalizer.NormalizedValue,
+    token: OcrToken,
+) -> FieldCandidate:
+    """A candidate found by position rather than by label.
+
+    Scored lower on purpose. It is a convention applied to an unlabelled
+    stamp, not a value read next to its own field name, and the operator
+    should be told the difference.
+    """
+    if not normalized.is_ambiguous:
+        normalized = normalizer.NormalizedValue(
+            normalized.value, is_ambiguous=True,
+            notes=normalized.notes + ["inferred from an unlabelled stamp"],
+        )
+    return FieldCandidate(
+        field=field,
+        raw_value=raw,
+        normalized=normalized,
+        label_token=None,
+        value_token=token,
+        strategy="inferred",
+        label_match_quality=0.5,
+        spatial_quality=0.5,
+    )
 
 
 def _derive_relative_expiry(

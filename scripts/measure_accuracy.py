@@ -32,10 +32,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2  # noqa: E402
 
+from app.config import get_settings  # noqa: E402
+from app.services import image_service  # noqa: E402
 from app.services.field_extractor import extract_fields  # noqa: E402
 from app.services.ocr_service import get_ocr_service  # noqa: E402
 
-GROUND_TRUTH = Path("sample_data/real_labels.json")
+DEFAULT_GROUND_TRUTH = "sample_data/roi_labels.json"
 
 CORRECT, WRONG, MISSED, FALSE_ACCEPT = "correct", "wrong", "missed", "false accept"
 
@@ -60,10 +62,15 @@ def _same(expected: str, actual: str) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", help="write the raw per-field result here")
+    parser.add_argument(
+        "--truth", default=DEFAULT_GROUND_TRUTH,
+        help="ground-truth file (default: ROI captures, the app's real input)",
+    )
     args = parser.parse_args()
 
-    truth = json.loads(GROUND_TRUTH.read_text(encoding="utf-8"))
+    truth = json.loads(Path(args.truth).read_text(encoding="utf-8"))
     ocr = get_ocr_service()
+    settings = get_settings()
 
     per_field: dict[str, Counter] = {}
     rows: list[dict] = []
@@ -77,8 +84,14 @@ def main() -> int:
             print(f"skipped (unreadable): {path}", file=sys.stderr)
             continue
 
+        # Mirror scan_service exactly. Measuring raw full-resolution input
+        # measures something the server never sees: it applies the configured
+        # preprocessing variant and resizes to the detection side length first,
+        # and that resize alone decides whether some stamps are found at all.
         started = time.perf_counter()
-        tokens = ocr.recognize(image)
+        prepared = image_service.build_variant(image, settings.variant_list[0])
+        prepared = image_service.resize_for_ocr(prepared, settings.ocr_det_limit_side_len)
+        tokens = ocr.recognize(prepared)
         elapsed = time.perf_counter() - started
         total_time += elapsed
 

@@ -16,18 +16,19 @@
     "Two captures are excluded entirely: 20260815_100338 and _100342 produce",
     "four to six tokens of noise with no readable field. They are camera",
     "failures, not extraction failures, and scoring them would measure the",
-    "photographer."
+    "photographer.",
+    "Photographs live in sample_data/real/. They were originally under images/, which is the runtime scan output directory and gets cleared."
   ],
   "images": [
     {
-      "image": "images/2026/08/15/20260815_091716.jpg",
+      "image": "sample_data/real/20260815_091716.jpg",
       "note": "GSK ENO sachets carton. Rotated 90. Batch strip faint.",
       "expected": {
         "mrp": "2.00"
       }
     },
     {
-      "image": "images/2026/08/15/20260815_091745.jpg",
+      "image": "sample_data/real/20260815_091745.jpg",
       "note": "Accusure thermometer carton. Single combined 'Lot / Batch No.' field.",
       "expected": {
         "lotCode": "MRDTWMTS202602001",
@@ -37,7 +38,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_091759.jpg",
+      "image": "sample_data/real/20260815_091759.jpg",
       "note": "Hedso 250ml bottle. Carries a per-ml price beside the MRP.",
       "expected": {
         "batchNumber": "BHO66B17",
@@ -47,7 +48,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_091813.jpg",
+      "image": "sample_data/real/20260815_091813.jpg",
       "note": "Aluminium can base. Dot-matrix on curved metal with glare.",
       "expected": {
         "batchNumber": "GSB0134",
@@ -58,7 +59,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_100300.jpg",
+      "image": "sample_data/real/20260815_100300.jpg",
       "note": "Yellow carton. USP per-gram price printed beside the MRP.",
       "expected": {
         "batchNumber": "ABD L4",
@@ -68,7 +69,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_100313.jpg",
+      "image": "sample_data/real/20260815_100313.jpg",
       "note": "MyFitness peanut butter jar, upside down.",
       "expected": {
         "batchNumber": "TS/182/26",
@@ -78,7 +79,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_100446.jpg",
+      "image": "sample_data/real/20260815_100446.jpg",
       "note": "Patanjali honey 500g. Per-gram price beside the MRP.",
       "expected": {
         "batchNumber": "BCM25000053",
@@ -88,7 +89,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_100503.jpg",
+      "image": "sample_data/real/20260815_100503.jpg",
       "note": "RSH 9ml sachet. Marked SAMPLE PRODUCT NOT FOR SALE, so no MRP exists.",
       "expected": {
         "batchNumber": "BADBF4023",
@@ -98,7 +99,7 @@
       }
     },
     {
-      "image": "images/2026/08/15/20260815_100608.jpg",
+      "image": "sample_data/real/20260815_100608.jpg",
       "note": "Saffola pouch, inverted, glossy film.",
       "expected": {
         "manufacturingDate": "2026-05-15",
