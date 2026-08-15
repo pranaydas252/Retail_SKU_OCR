@@ -33,6 +33,8 @@ import io  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from app.services import normalizer  # noqa: E402
+from app.services.field_extractor import extract_fields  # noqa: E402
+from app.services.ocr_service import OcrToken  # noqa: E402
 
 OLLAMA = "http://127.0.0.1:11434/api/generate"
 TRUTH = Path("sample_data/roi_labels.json")
@@ -158,6 +160,96 @@ def normalize(field: str, value) -> str | None:
     return result.value if result.ok else text
 
 
+#: Transcription prompt, for models that read but do not follow instructions.
+#:
+#: PaddleOCR-VL is a document parser, not a general assistant. Asked for JSON
+#: it returns the pack's printed labels and drops the values; asked simply to
+#: read, it transcribes the panel including the values. So it is used for what
+#: it is good at — recognition — and the existing rule extractor does the field
+#: work on its output.
+#:
+#: "OCR:" is the model's own task prefix and beats a conversational
+#: instruction. On one capture it recovered the manufacturing date, expiry and
+#: MRP that a plain-English prompt reduced to the three characters "TTB", and
+#: that PP-OCRv5 never recognised at all.
+TRANSCRIBE_PROMPT = "OCR:"
+
+
+def transcribe_to_tokens(text: str) -> list[OcrToken]:
+    """Turn a transcription into tokens the field extractor can consume.
+
+    The extractor is spatial, but a transcription has no coordinates. It does
+    have line structure, and on these packs a line is exactly one field —
+    "Mfg. Date : 11-10-2025" — which is the extractor's inline strategy, the
+    one case that needs no geometry at all.
+
+    Synthesising one token per line preserves reading order and keeps distinct
+    fields on distinct rows, so a label can never associate with the value
+    beneath it. Widths are nominal; nothing downstream measures them.
+    """
+    tokens = []
+    for index, line in enumerate(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        tokens.append(
+            OcrToken(
+                text=line,
+                x=0,
+                y=index * 40,
+                width=max(len(line) * 10, 10),
+                height=30,
+                confidence=1.0,
+            )
+        )
+    return tokens
+
+
+def ask_transcription(
+    model: str, image: Path, timeout: int, max_side: int
+) -> tuple[dict, float, str]:
+    """Transcribe, then extract fields with the server's own rules."""
+    payload = json.dumps({
+        "model": model,
+        "prompt": TRANSCRIBE_PROMPT,
+        "images": [encode(image, max_side)],
+        "stream": False,
+        "options": {
+            "temperature": 0,
+            "num_ctx": 8192,
+            # A label panel is a few dozen words. The only thing a larger
+            # budget buys is room for the model to loop: every collapse
+            # observed ran to the limit emitting "1.00 2.00 3.00..." or
+            # "100% 100% 100%...", while every clean read finished in well
+            # under a hundred tokens. Capping it bounds the worst case to a
+            # few seconds instead of forty.
+            "num_predict": 220,
+            # Greedy decoding is what walks into those loops, and this is the
+            # standard brake. Kept mild so genuinely repeated label text — two
+            # dates in the same format, say — still transcribes.
+            "repeat_penalty": 1.15,
+            "repeat_last_n": 64,
+        },
+    }).encode()
+
+    request = urllib.request.Request(
+        OLLAMA, data=payload, headers={"Content-Type": "application/json"}
+    )
+
+    started = time.perf_counter()
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        body = json.loads(response.read())
+    elapsed = time.perf_counter() - started
+
+    text = body.get("response", "")
+    fields = {
+        name: candidate.normalized.value
+        for name, candidate in extract_fields(transcribe_to_tokens(text)).items()
+        if candidate.normalized.ok
+    }
+    return fields, elapsed, text
+
+
 def ask(model: str, image: Path, timeout: int, max_side: int) -> tuple[dict, float]:
     payload = json.dumps({
         "model": model,
@@ -203,6 +295,9 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--max-side", type=int, default=MAX_SIDE,
                         help="longest side sent to the model")
+    parser.add_argument("--mode", choices=("json", "transcribe"), default="json",
+                        help="ask the model for fields, or transcribe and let "
+                             "the server's rules extract them")
     parser.add_argument("--json", help="write raw model output here")
     args = parser.parse_args()
 
@@ -219,8 +314,14 @@ def main() -> int:
         if not path.exists():
             continue
 
+        raw_text = ""
         try:
-            got, elapsed = ask(args.model, path, args.timeout, args.max_side)
+            if args.mode == "transcribe":
+                got, elapsed, raw_text = ask_transcription(
+                    args.model, path, args.timeout, args.max_side
+                )
+            else:
+                got, elapsed = ask(args.model, path, args.timeout, args.max_side)
         except (urllib.error.URLError, TimeoutError) as exc:
             print(f"{path.name:32s} FAILED: {exc}", file=sys.stderr)
             continue
@@ -244,8 +345,8 @@ def main() -> int:
             outcomes[field] = outcome
             per_field.setdefault(field, Counter())[outcome] += 1
 
-        rows.append({"image": path.name, "seconds": elapsed,
-                     "model": got, "expected": entry["expected"]})
+        rows.append({"image": path.name, "seconds": elapsed, "model": got,
+                     "expected": entry["expected"], "transcription": raw_text})
         print(
             f"{path.name:32s} {elapsed:6.1f}s  "
             + "  ".join(f"{f}:{o[0].upper()}" for f, o in sorted(outcomes.items())),

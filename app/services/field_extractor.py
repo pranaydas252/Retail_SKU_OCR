@@ -442,6 +442,10 @@ _UNIT_PRICE_LABEL = re.compile(r"\bUSP\b", re.IGNORECASE)
 #: Currency markers, which are the only letters allowed to sit inside a price.
 _CURRENCY_MARKER = re.compile(r"RS|INR|MRP|M\.?R\.?P|₹|/-|/=", re.IGNORECASE)
 
+#: A bracketed aside, in either ASCII or fullwidth brackets. Beside a price it
+#: is the tax disclaimer or the per-unit rate, never the amount itself.
+_BRACKETED = re.compile(r"[(（][^)）]*[)）]?")
+
 
 def _looks_like_price(text: str) -> bool:
     """True when a token could be a retail price rather than merely numeric.
@@ -460,7 +464,13 @@ def _looks_like_price(text: str) -> bool:
     if _UNIT_PRICE_LABEL.search(text):
         return False
 
-    remainder = _PER_UNIT.sub(" ", text)
+    # A parenthetical beside a price is never the price. Packs print
+    # "MRP (Incl. of all taxes) : 23.00 (₹:0.23/g)", and both brackets have to
+    # go before the letter test below — otherwise the statutory phrase inside
+    # the first one disqualifies a price that is plainly there. Fullwidth
+    # brackets included: the recogniser emits them on metallic print.
+    remainder = _BRACKETED.sub(" ", text)
+    remainder = _PER_UNIT.sub(" ", remainder)
     remainder = _CURRENCY_MARKER.sub(" ", remainder)
     if not _NUMBER_HINT.search(remainder):
         return False
