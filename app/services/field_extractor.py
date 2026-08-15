@@ -107,6 +107,29 @@ _NUMBER_HINT = re.compile(r"\d")
 _CODE_HINT = re.compile(r"[A-Z0-9]{3,}", re.IGNORECASE)
 
 
+#: Boilerplate that sits next to the fields we want and is never a value.
+#:
+#: "(Inclusive of all taxes)" follows MRP on essentially every Indian pack, and
+#: was being adopted as a batch code on real captures — the extractor produced
+#: `batchNumber=INCLUSIVEOF` from a photograph of a medicine carton.
+_BOILERPLATE = {
+    "INCLUSIVEOFALLTAXES",
+    "INCLOFALLTAXES",
+    "INCLUSIVEOF",
+    "INCLOF",
+    "ALLTAXES",
+    "PERSACHET",
+    "NETCONTENTS",
+    "NETWT",
+    "NETWEIGHT",
+    "MFDBY",
+    "MKTBY",
+    "MARKETEDBY",
+    "MANUFACTUREDBY",
+    "CUSTOMERCARE",
+}
+
+
 def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
     """Reject a candidate that cannot be this field's value.
 
@@ -118,13 +141,23 @@ def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
         return False
     if stripped in all_aliases:
         return False
+    if stripped in _BOILERPLATE:
+        return False
 
     if value_type == "date":
         return bool(_DATE_HINT.search(text))
     if value_type == "currency":
         return bool(_NUMBER_HINT.search(text))
     if value_type == "code":
-        return bool(_CODE_HINT.search(text))
+        if not _CODE_HINT.search(text):
+            return False
+        # A batch or lot code carries at least one digit. Purely alphabetic
+        # runs next to a "BATCH" label are prose — statutory text, an address,
+        # a marketing line — not the code. Verified against real captures:
+        # this is what separates "GSB0134" from "INCLUSIVEOF".
+        if not any(char.isdigit() for char in text):
+            return False
+        return True
     return True
 
 

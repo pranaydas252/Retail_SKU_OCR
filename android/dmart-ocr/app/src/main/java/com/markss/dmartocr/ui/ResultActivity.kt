@@ -9,11 +9,13 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.ViewGroup
 import android.view.View
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.gridlayout.widget.GridLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.markss.dmartocr.R
@@ -91,7 +93,6 @@ class ResultActivity : AppCompatActivity() {
         }
         scan = decode(payload)
 
-        binding.scanId.text = getString(R.string.result_scan_id, scan.scanId)
         binding.unsavedBanner.visibility = if (scan.persisted) View.GONE else View.VISIBLE
 
         buildFields()
@@ -156,8 +157,24 @@ class ResultActivity : AppCompatActivity() {
         }
 
         rows[name] = row
-        binding.fieldContainer.addView(row.root)
+        binding.fieldContainer.addView(row.root, cellParams())
     }
+
+    /**
+     * Half-width cell in the two-column grid.
+     *
+     * GridLayout children default to WRAP_CONTENT and no weight, which makes
+     * every card size to its own text and leaves a ragged right edge. A column
+     * weight with a zero base width is what makes the two columns equal.
+     */
+    private fun cellParams(): GridLayout.LayoutParams =
+        GridLayout.LayoutParams().apply {
+            width = 0
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            val gap = (4 * resources.displayMetrics.density).toInt()
+            setMargins(gap, 0, gap, 0)
+        }
 
     /** Fallback label when the server sends a key without a display name. */
     private fun humanise(key: String): String {

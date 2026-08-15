@@ -19,6 +19,9 @@
     <string name="settings_printer_hint">Printer Bluetooth MAC</string>
     <string name="settings_printer_help">ZQ320 address in the form AC:3F:A4:11:22:33. Leave empty until a printer is paired.</string>
     <string name="settings_printer_error">Enter a MAC like AC:3F:A4:11:22:33</string>
+    <string name="settings_test_print">Test print</string>
+    <string name="settings_test_print_running">Sending test label…</string>
+    <string name="settings_test_print_ok">Test label sent. Check the printer.</string>
     <string name="settings_save">Save</string>
     <string name="settings_cancel">Cancel</string>
     <string name="cd_settings">Configuration</string>

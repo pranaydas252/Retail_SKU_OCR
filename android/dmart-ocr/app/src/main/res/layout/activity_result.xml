@@ -35,25 +35,17 @@
             android:paddingTop="24dp"
             android:paddingBottom="16dp">
 
-            <TextView
-                android:id="@+id/scanId"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.DmartOcr.Label"
-                android:textColor="@color/brand_cyan"
-                tools:text="SCAN 000047" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:text="@string/result_title"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Display" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="6dp"
                 android:text="@string/result_subtitle"
                 android:textAppearance="@style/TextAppearance.DmartOcr.Body" />
 
@@ -120,12 +112,16 @@
                     android:textColor="@color/band_low" />
             </LinearLayout>
 
-            <LinearLayout
+            <!-- Two columns. Batch codes, dates and prices are all short, so a
+                 full-width row per field wasted most of the screen and pushed
+                 the rest below the fold. -->
+            <androidx.gridlayout.widget.GridLayout
                 android:id="@+id/fieldContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:orientation="vertical" />
+                android:layout_marginTop="18dp"
+                app:columnCount="2"
+                app:useDefaultMargins="false" />
 
             <!-- OCR will miss things, and the field set is not fixed. The
                  operator needs a way to record something the server never

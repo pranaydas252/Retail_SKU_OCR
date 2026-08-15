@@ -132,6 +132,32 @@ object ZplBuilder {
     }
 
     /**
+     * Minimal self-test label: a QR at the real 10mm geometry plus a caption.
+     *
+     * Uses the same magnification and error correction as a production label,
+     * so if this scans the density budget is proven on actual media rather than
+     * on arithmetic.
+     */
+    fun testLabel(): String = buildString {
+        append("~SD$DARKNESS")
+        append("^XA")
+        append("^CI28")
+        append("^PW$PRINT_WIDTH_DOTS")
+        append("^LL").append(QR_SIZE_DOTS + MARGIN_DOTS * 2 + mm(6f))
+        append("^LH0,0")
+        append("^CF0,").append(TITLE_HEIGHT_DOTS)
+        append("^FO$MARGIN_DOTS,$MARGIN_DOTS^FDPRINTER OK^FS")
+        append("^CF0,").append(LABEL_TEXT_HEIGHT_DOTS)
+        append("^FO$MARGIN_DOTS,").append(MARGIN_DOTS + TITLE_HEIGHT_DOTS + mm(2f))
+        append("^FD10mm QR test^FS")
+        val qrX = PRINT_WIDTH_DOTS - MARGIN_DOTS - QR_SIZE_DOTS - QR_QUIET_ZONE_DOTS
+        append("^FO$qrX,$MARGIN_DOTS")
+        append("^BQN,2,$QR_MAGNIFICATION")
+        append("^FD${QR_ERROR_CORRECTION}A,PRINTER-TEST^FS")
+        append("^XZ")
+    }
+
+    /**
      * Escapes the ZPL control characters.
      *
      * `^` and `~` start commands and `\` escapes; an unescaped one in a batch

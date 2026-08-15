@@ -82,4 +82,24 @@
         android:textAppearance="@style/TextAppearance.DmartOcr.Body"
         android:textSize="12sp" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/testPrintButton"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/settings_test_print"
+        android:textColor="@color/brand_cyan"
+        app:cornerRadius="14dp"
+        app:strokeColor="@color/outline_strong" />
+
+    <TextView
+        android:id="@+id/testPrintResult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textAppearance="@style/TextAppearance.DmartOcr.Body"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
 </LinearLayout>

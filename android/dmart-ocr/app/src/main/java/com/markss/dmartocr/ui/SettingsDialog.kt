@@ -5,7 +5,14 @@ import android.view.LayoutInflater
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.markss.dmartocr.R
 import com.markss.dmartocr.data.AppPreferences
+import android.view.View
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.markss.dmartocr.databinding.DialogSettingsBinding
+import com.markss.dmartocr.print.BluetoothLabelPrinter
+import com.markss.dmartocr.print.PrintResult
+import kotlinx.coroutines.launch
 
 /**
  * Site configuration: backend address and printer Bluetooth MAC.
@@ -18,6 +25,7 @@ object SettingsDialog {
 
     fun show(context: Context, onSaved: () -> Unit) {
         val binding = DialogSettingsBinding.inflate(LayoutInflater.from(context))
+        val scope = (context as LifecycleOwner).lifecycleScope
 
         binding.serverInput.setText(AppPreferences.serverUrl)
         binding.printerInput.setText(AppPreferences.printerMac)
@@ -31,6 +39,45 @@ object SettingsDialog {
                 androidx.core.content.ContextCompat.getDrawable(context, R.drawable.bg_dialog)
             )
             .create()
+
+        // Proving the printer from here decouples two subsystems: diagnosing a
+        // print failure by repeatedly photographing a product label confounds
+        // OCR problems with printer problems.
+        binding.testPrintButton.setOnClickListener {
+            val mac = binding.printerInput.text?.toString().orEmpty()
+            if (!AppPreferences.isValidMac(mac) || mac.isBlank()) {
+                binding.printerLayout.error = context.getString(R.string.settings_printer_error)
+                return@setOnClickListener
+            }
+            // Saved first so the printer uses what is on screen, not a stale value.
+            AppPreferences.printerMac = mac
+
+            binding.testPrintButton.isEnabled = false
+            binding.testPrintResult.visibility = View.VISIBLE
+            binding.testPrintResult.setText(R.string.settings_test_print_running)
+            binding.testPrintResult.setTextColor(
+                ContextCompat.getColor(context, R.color.text_secondary)
+            )
+
+            scope.launch {
+                val result = BluetoothLabelPrinter(context).testPrint()
+                binding.testPrintButton.isEnabled = true
+                when (result) {
+                    is PrintResult.Success -> {
+                        binding.testPrintResult.setText(R.string.settings_test_print_ok)
+                        binding.testPrintResult.setTextColor(
+                            ContextCompat.getColor(context, R.color.band_high)
+                        )
+                    }
+                    is PrintResult.Failure -> {
+                        binding.testPrintResult.text = result.message
+                        binding.testPrintResult.setTextColor(
+                            ContextCompat.getColor(context, R.color.band_low)
+                        )
+                    }
+                }
+            }
+        }
 
         dialog.setOnShowListener {
             // Bound after show() so a validation failure can keep the dialog

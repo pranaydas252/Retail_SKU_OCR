@@ -160,13 +160,54 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
      *
      * Paused is treated as blocking: a paused ZQ320 accepts the job and holds
      * it, so the operator would walk away believing a label was produced.
+     *
+     * "Out of labels" on a printer that visibly has media almost always means
+     * media SENSING, not media absence: the printer is calibrated for gap or
+     * black-mark stock and is being fed continuous stock (or the reverse), so
+     * it feeds looking for a mark it cannot find and reports itself empty. The
+     * message says so, because "out of labels" sends the operator to reload
+     * paper that is already there.
      */
     private fun describeBlockingStatus(status: PrinterStatus): String? = when {
         status.isReadyToPrint -> null
-        status.isPaperOut -> "The printer is out of labels."
-        status.isHeadOpen -> "The printer head is open."
-        status.isPaused -> "The printer is paused."
-        else -> "The printer is not ready."
+        status.isHeadOpen -> "The printer cover is open. Close it and try again."
+        status.isPaused -> "The printer is paused. Take it off pause and try again."
+        status.isPaperOut ->
+            "The printer reports no media. If labels ARE loaded, it is calibrated " +
+                "for a different media type — run a calibration from the printer, " +
+                "or switch media mode in settings."
+        else -> "The printer is not ready (${describe(status)})."
+    }
+
+    /** Raw status flags, for a log line that can actually be diagnosed. */
+    private fun describe(status: PrinterStatus): String = buildString {
+        append("ready=").append(status.isReadyToPrint)
+        append(" paperOut=").append(status.isPaperOut)
+        append(" headOpen=").append(status.isHeadOpen)
+        append(" paused=").append(status.isPaused)
+        append(" partialFormat=").append(status.isPartialFormatInProgress)
+        append(" buffersFull=").append(status.isReceiveBufferFull)
+    }
+
+    /**
+     * Prints a small self-test label and reports the printer's own status.
+     *
+     * Exists so the printer can be proven independently of a scan. Diagnosing a
+     * print failure by repeatedly photographing a product label is slow and
+     * confounds two subsystems.
+     */
+    suspend fun testPrint(): PrintResult = withContext(Dispatchers.IO) {
+        preflight()?.let { return@withContext it }
+        if (missingPermissions().isNotEmpty()) {
+            return@withContext PrintResult.Failure(
+                PrintResult.Reason.PERMISSION_DENIED,
+                "Bluetooth permission is required to print.",
+            )
+        }
+        send(
+            AppPreferences.printerMac.trim().uppercase(Locale.US),
+            ZplBuilder.testLabel(),
+        )
     }
 
     /**
