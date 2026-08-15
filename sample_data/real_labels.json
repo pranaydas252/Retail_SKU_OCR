@@ -1,0 +1,110 @@
+{
+  "_readme": [
+    "Ground truth for real D-Mart-class labels captured on the TC22.",
+    "",
+    "Transcribed by reading each photograph. Conventions:",
+    "  value   - the field is printed on the pack and reads exactly this,",
+    "            already in the normalized form the server should produce",
+    "            (YYYY-MM or YYYY-MM-DD for dates, plain decimal for money).",
+    "  null    - the field is genuinely ABSENT from the pack. Extracting",
+    "            anything here is a false accept, the worst failure class",
+    "            in this project (CLAUDE.md section 24).",
+    "  omitted - not legible enough in the photograph to assert a truth.",
+    "            Not scored either way, so a guess is neither rewarded nor",
+    "            punished.",
+    "",
+    "Two captures are excluded entirely: 20260815_100338 and _100342 produce",
+    "four to six tokens of noise with no readable field. They are camera",
+    "failures, not extraction failures, and scoring them would measure the",
+    "photographer."
+  ],
+  "images": [
+    {
+      "image": "images/2026/08/15/20260815_091716.jpg",
+      "note": "GSK ENO sachets carton. Rotated 90. Batch strip faint.",
+      "expected": {
+        "mrp": "2.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_091745.jpg",
+      "note": "Accusure thermometer carton. Single combined 'Lot / Batch No.' field.",
+      "expected": {
+        "lotCode": "MRDTWMTS202602001",
+        "manufacturingDate": "2026-02",
+        "expiryDate": null,
+        "mrp": "263.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_091759.jpg",
+      "note": "Hedso 250ml bottle. Carries a per-ml price beside the MRP.",
+      "expected": {
+        "batchNumber": "BHO66B17",
+        "manufacturingDate": "2026-02",
+        "expiryDate": "2028-01",
+        "mrp": "180.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_091813.jpg",
+      "note": "Aluminium can base. Dot-matrix on curved metal with glare.",
+      "expected": {
+        "batchNumber": "GSB0134",
+        "manufacturingDate": "2024-11",
+        "expiryDate": "2026-10",
+        "lotCode": null,
+        "mrp": "232.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_100300.jpg",
+      "note": "Yellow carton. USP per-gram price printed beside the MRP.",
+      "expected": {
+        "batchNumber": "ABD L4",
+        "manufacturingDate": "2026-06-10",
+        "expiryDate": "2027-06-09",
+        "mrp": "60.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_100313.jpg",
+      "note": "MyFitness peanut butter jar, upside down.",
+      "expected": {
+        "batchNumber": "TS/182/26",
+        "manufacturingDate": "2026-06-03",
+        "expiryDate": "2028-06-02",
+        "mrp": "319.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_100446.jpg",
+      "note": "Patanjali honey 500g. Per-gram price beside the MRP.",
+      "expected": {
+        "batchNumber": "BCM25000053",
+        "manufacturingDate": "2025-08-05",
+        "expiryDate": "2027-02-04",
+        "mrp": "210.00"
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_100503.jpg",
+      "note": "RSH 9ml sachet. Marked SAMPLE PRODUCT NOT FOR SALE, so no MRP exists.",
+      "expected": {
+        "batchNumber": "BADBF4023",
+        "manufacturingDate": "2026-04",
+        "expiryDate": "2029-03",
+        "mrp": null
+      }
+    },
+    {
+      "image": "images/2026/08/15/20260815_100608.jpg",
+      "note": "Saffola pouch, inverted, glossy film.",
+      "expected": {
+        "manufacturingDate": "2026-05-15",
+        "expiryDate": "2027-05-15",
+        "mrp": "200.00"
+      }
+    }
+  ]
+}

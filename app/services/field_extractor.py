@@ -165,10 +165,24 @@ def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
 
 
 def _same_line(label: OcrToken, candidate: OcrToken) -> bool:
-    """Vertical overlap, tolerant of the few pixels label and value differ by."""
-    overlap = min(label.bottom, candidate.bottom) - max(label.y, candidate.y)
-    shorter = min(label.height, candidate.height) or 1
-    return overlap > 0.5 * shorter
+    """True when a label and a candidate sit on the same printed line.
+
+    Compares line CENTRES rather than box overlap. A pack is photographed at
+    whatever angle the operator is holding it, so a printed row arrives with
+    the label and its value on a slight diagonal, and the two boxes may barely
+    overlap while plainly belonging to the same line.
+
+    Measured on a real bottle capture, "Batch No.:" and its value overlapped by
+    35px against a 50px requirement, and "Expiry Date:" missed by a single
+    pixel. Both were rejected, and both are obviously the same row to a reader.
+
+    The tolerance scales with the taller box, so it holds at any capture
+    distance.
+    """
+    label_centre = label.y + label.height / 2
+    candidate_centre = candidate.y + candidate.height / 2
+    tallest = max(label.height, candidate.height) or 1
+    return abs(label_centre - candidate_centre) < 0.8 * tallest
 
 
 def _horizontally_aligned(label: OcrToken, candidate: OcrToken) -> bool:
@@ -247,8 +261,60 @@ def _find_label_matches(
     return matches
 
 
+def _looks_rotated(tokens: list[OcrToken]) -> bool:
+    """True when the text runs vertically down the image.
+
+    Operators photograph packs in whatever orientation the pack is held, and a
+    carton side or a can base is very often captured with the print running
+    bottom-to-top. PaddleOCR reads rotated text correctly, but it returns an
+    axis-aligned box around it, so a horizontal line of rotated text has a TALL
+    narrow box. Every spatial rule here is written in reading space, so without
+    this the label and its value never share a "line".
+
+    Judged on tokens of four characters or more: a short token like "MFG" is
+    nearly square either way and carries no signal.
+    """
+    meaningful = [t for t in tokens if len(t.text) >= 4 and t.width > 0 and t.height > 0]
+    if len(meaningful) < 2:
+        return False
+
+    taller = sum(1 for t in meaningful if t.height > t.width * 1.5)
+    return taller > len(meaningful) / 2
+
+
+def _to_reading_space(tokens: list[OcrToken]) -> list[OcrToken]:
+    """Rotate token geometry so vertical text reads left-to-right.
+
+    Only the coordinates move. The recognized text is already correct, so this
+    is a cheap transform rather than a second OCR pass: (x, y) -> (y, -x), with
+    width and height swapped.
+    """
+    if not tokens:
+        return tokens
+
+    max_bottom = max(t.bottom for t in tokens)
+    rotated = [
+        OcrToken(
+            text=t.text,
+            x=t.y,
+            y=max_bottom - t.right,
+            width=t.height,
+            height=t.width,
+            confidence=t.confidence,
+            variant=t.variant,
+        )
+        for t in tokens
+    ]
+    rotated.sort(key=lambda t: (round(t.y / 10), t.x))
+    return rotated
+
+
 def extract_fields(tokens: list[OcrToken]) -> dict[str, FieldCandidate]:
     """Extract the best candidate per field from a token list."""
+    if _looks_rotated(tokens):
+        logger.info("Tokens look rotated; mapping into reading space")
+        tokens = _to_reading_space(tokens)
+
     specs = load_field_specs()
     all_aliases = {
         _canonical(alias) for spec in specs for alias in spec.aliases

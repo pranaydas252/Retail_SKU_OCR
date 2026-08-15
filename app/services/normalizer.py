@@ -303,6 +303,17 @@ def normalize_currency(raw: str) -> NormalizedValue:
     stripped = re.sub(r"(MRP|M\.?R\.?P\.?|MAX(IMUM)?\s*RETAIL\s*PRICE)", " ", text)
     stripped = re.sub(r"(RS\.?|INR|₹|/-|/=)", " ", stripped)
 
+    # Strip per-unit prices before looking for the MRP. "Rs.60.00 Rs.0.30/g"
+    # and "180.00 @ 0.72/ml" both print a unit price beside the retail price,
+    # and it was being picked instead — the extractor returned 72.00 for a
+    # bottle marked 180.00.
+    stripped = re.sub(
+        r"[0-9OoQDIlisSBGZz|.,]+\s*(?:/|PER\s*)\s*(?:G|GM|GRAM|ML|L|KG|N|PC|PCS)",
+        " ",
+        stripped,
+    )
+    stripped = re.sub(r"USP.*", " ", stripped)
+
     matches = _numeric_runs(stripped)
 
     if anchored:
@@ -344,7 +355,19 @@ def normalize_code(raw: str) -> NormalizedValue:
         return NormalizedValue(None, notes=["empty"])
 
     text = raw.strip().upper()
-    text = re.sub(r"^(BATCH|B\.?NO\.?|BN|LOT|LOT\s*NO\.?|LOT\s*CODE)[.:\s]*", "", text)
+
+    # Repeatedly, not once: a pack that prints "Lot / Batch No. MRDTW..." has
+    # two label words in front of the value, and stripping one left "BATCHNO"
+    # glued to the code.
+    label = re.compile(
+        r"^\s*(?:LOT|BATCH|B\.?\s*NO\.?|BN|NO\.?|CODE|NUMBER)\s*[./:\-]*\s*"
+    )
+    while True:
+        stripped = label.sub("", text, count=1)
+        if stripped == text:
+            break
+        text = stripped
+
     cleaned = re.sub(r"[^A-Z0-9\-/]", "", text).strip("-/")
 
     if not cleaned:
