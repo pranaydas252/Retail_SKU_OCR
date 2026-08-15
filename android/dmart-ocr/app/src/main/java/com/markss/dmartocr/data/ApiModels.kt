@@ -88,6 +88,13 @@ data class ConfirmResponse(
 )
 
 @Serializable
+data class PrintResponse(
+    val scanId: String,
+    val status: String,
+    val qrPayload: String? = null,
+)
+
+@Serializable
 data class HealthResponse(
     val status: String,
     val ocrReady: Boolean = false,

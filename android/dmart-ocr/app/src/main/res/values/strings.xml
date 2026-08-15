@@ -64,6 +64,15 @@
     <string name="result_review_count_plural">%1$d values need review</string>
     <string name="result_all_clear">All values read clearly</string>
 
+    <!-- Printing -->
+    <string name="result_printing">Printing…</string>
+    <string name="print_failed_title">Label not printed</string>
+    <string name="print_failed_body">%1$s
+
+The scan has been saved. You can retry the label or continue without it.</string>
+    <string name="print_skip">Continue</string>
+    <string name="print_permission_denied">Bluetooth permission was refused, so the label cannot be printed.</string>
+
     <!-- Field labels -->
     <string name="field_batch_number">Batch number</string>
     <string name="field_manufacturing_date">Manufacturing date</string>

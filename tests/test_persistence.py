@@ -210,3 +210,25 @@ class TestNormalizationIdempotence:
     def test_invalid_iso_is_still_rejected(self):
         assert normalize_date("2026-13").value is None
         assert normalize_date("2026-02-31").value is None
+
+
+class TestQrPayloadAuthority:
+    """The operator's confirmation wins over OCR (sections 4 and 11)."""
+
+    def test_cleared_field_stays_empty_in_the_payload(self):
+        # A field the operator deliberately cleared must not be repopulated
+        # from OCR. Doing so prints data onto the label that the operator
+        # removed on purpose.
+        payload = scan_service.build_qr_payload(
+            "SCAN-000047",
+            {
+                "batchNumber": "A23C92",
+                "manufacturingDate": "2026-07",
+                "expiryDate": "2028-06",
+                "lotCode": None,
+                "mrp": "245.00",
+            },
+        )
+
+        assert payload == "SCAN-000047|A23C92|2026-07|2028-06||245.00"
+        assert payload.split("|")[4] == "", "cleared lot code must stay blank"

@@ -87,6 +87,12 @@ android {
 }
 
 dependencies {
+    // Zebra Link-OS Multiplatform SDK (ZSDK), for ZQ320 printing over Bluetooth
+    // (CLAUDE.md §18). Not on Maven Central — it ships as a manual download
+    // from Zebra behind an EULA, so the jar is vendored here and git-ignored.
+    // See android/dmart-ocr/README.md for how to obtain it.
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)

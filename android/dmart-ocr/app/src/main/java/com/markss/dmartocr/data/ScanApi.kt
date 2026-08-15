@@ -37,6 +37,10 @@ interface ScanApi {
         @Path("scanId") scanId: String,
         @Body body: ConfirmRequest,
     ): ConfirmResponse
+
+    /** Records that a label was printed. Called after the printer confirms. */
+    @POST("api/v1/scans/{scanId}/print")
+    suspend fun recordPrint(@Path("scanId") scanId: String): PrintResponse
 }
 
 object ApiClient {

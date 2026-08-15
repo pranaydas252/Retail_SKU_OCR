@@ -84,6 +84,35 @@ Dynamic colour is deliberately off. The confidence bands carry safety meaning, a
 
 ---
 
+## Printing
+
+ZQ320 over Bluetooth via the Zebra Link-OS Multiplatform SDK, ZPL, with a 10 mm x 10 mm QR.
+
+The SDK is **not on Maven Central** — it is a manual download from Zebra behind an EULA. The dependency declaration is committed; the binary is not.
+
+To build with printing:
+
+1. Download the Link-OS Multiplatform SDK for Android from Zebra.
+2. Copy `ZSDK_ANDROID_API.jar` into `app/libs/`.
+
+`app/build.gradle.kts` picks up any jar in `libs/`, and `app/libs/*.jar` is git-ignored.
+
+Why the SDK rather than a raw RFCOMM socket: `PrinterStatus`. A socket write to a printer that is out of labels or has its head open succeeds at the transport level and silently produces nothing — exactly the silent failure CLAUDE.md §18 forbids. Checking status first turns it into a message the operator can act on.
+
+### QR density budget
+
+Fixed by §17 and enforced in `ZplBuilder`:
+
+| Setting | Value |
+| --- | --- |
+| Head | 203 dpi = 8 dots/mm |
+| Symbol | 10 mm = 80 dots |
+| `^BQ` magnification | 2 (module = 2 dots = 0.25 mm) |
+| QR version | 5 — 37 x 37 modules = 74 dots = 9.25 mm |
+| Error correction | M, ~154 alphanumeric characters |
+
+Version 6 is 41 modules = 82 dots = 10.25 mm and overflows, so a payload over 154 characters is **rejected** rather than silently printed too large.
+
 ## Status
 
 Written but **not yet compiled or run** — no TC22 available at the time of writing, and the build was not executed. Resource references, `R.*` usages, and every ViewBinding field have been cross-checked against the layouts statically, but that is not a substitute for a compiler.

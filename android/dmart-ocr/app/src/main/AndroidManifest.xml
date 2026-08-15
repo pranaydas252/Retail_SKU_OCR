@@ -6,6 +6,24 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+        Printing to the ZQ320 over Bluetooth.
+
+        BLUETOOTH_CONNECT is a runtime permission from API 31. The legacy
+        install-time permissions are capped at API 30 so they are not requested
+        on newer devices, where they no longer exist.
+
+        No BLUETOOTH_SCAN: the printer address is configured by the operator, so
+        the app never discovers devices and therefore never needs location.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="true" />

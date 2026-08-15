@@ -12,6 +12,8 @@ from app.db.repositories import PersistenceError
 from app.models.request_models import ConfirmScanRequest
 from app.models.response_models import (
     ConfirmScanResponse,
+    PrintScanResponse,
+    ProcessingStatus,
     ScanResponse,
     StoredScanResponse,
 )
@@ -104,6 +106,70 @@ def confirm_scan(scan_code: str, body: ConfirmScanRequest) -> ConfirmScanRespons
                 "message": "The confirmation could not be saved. Please retry.",
             },
         ) from exc
+
+
+@router.post(
+    "/scans/{scan_code}/print",
+    response_model=PrintScanResponse,
+    response_model_by_alias=True,
+)
+def record_print(scan_code: str) -> PrintScanResponse:
+    """Record that a label was printed, and return the QR payload.
+
+    Called by the app *after* the printer reports success, not before. Marking
+    a scan PRINTED and then failing to print would leave the audit trail
+    claiming something that never happened.
+
+    A print failure never rolls back the confirmed scan — the data is already
+    committed and printing is a separate, retryable step (CLAUDE.md §18).
+    """
+    try:
+        stored = repositories.get_scan(scan_code)
+        if stored is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "status": "ERROR",
+                    "code": "SCAN_NOT_FOUND",
+                    "message": f"No scan found with id {scan_code}.",
+                },
+            )
+
+        repositories.mark_printed(scan_code)
+    except PersistenceError as exc:
+        logger.exception("Recording print failed", extra={"scanId": scan_code})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "status": "ERROR",
+                "code": "PERSISTENCE_FAILED",
+                "message": "The print could not be recorded.",
+            },
+        ) from exc
+
+    # Once a scan is confirmed the operator's values are authoritative,
+    # including the ones they deliberately cleared. Falling back to the OCR
+    # value for a blank field would resurrect data the operator removed and
+    # print it onto the label — the operator is the final authority (§4).
+    #
+    # The fallback applies only to scans that were never confirmed, where a
+    # normalized value is the best available answer.
+    if stored.confirmed_at is not None:
+        confirmed = {
+            name: field.get("confirmedValue") for name, field in stored.fields.items()
+        }
+    else:
+        confirmed = {
+            name: field.get("normalizedValue") for name, field in stored.fields.items()
+        }
+
+    logger.info("Print recorded", extra={"scanId": scan_code})
+
+    return PrintScanResponse(
+        scanId=scan_code,
+        status=ProcessingStatus.PRINTED,
+        qrPayload=scan_service.build_qr_payload(scan_code, confirmed),
+    )
 
 
 @router.get(

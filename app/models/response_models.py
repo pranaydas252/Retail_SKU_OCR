@@ -102,6 +102,14 @@ class ConfirmScanResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PrintScanResponse(BaseModel):
+    scan_id: str = Field(alias="scanId")
+    status: ProcessingStatus
+    qr_payload: str | None = Field(default=None, alias="qrPayload")
+
+    model_config = {"populate_by_name": True}
+
+
 class StoredScanResponse(BaseModel):
     """A scan read back from the database, including the operator's edits."""
 

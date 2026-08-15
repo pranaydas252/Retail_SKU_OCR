@@ -1,9 +1,14 @@
 package com.markss.dmartocr.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -15,6 +20,10 @@ import com.markss.dmartocr.data.ScanResponse
 import com.markss.dmartocr.databinding.ActivityResultBinding
 import com.markss.dmartocr.databinding.ItemFieldBinding
 import com.markss.dmartocr.device.DeviceId
+import com.markss.dmartocr.print.BluetoothLabelPrinter
+import com.markss.dmartocr.print.ConfirmedScan
+import com.markss.dmartocr.print.LabelPrinter
+import com.markss.dmartocr.print.PrintResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,6 +43,37 @@ class ResultActivity : AppCompatActivity() {
 
     /** Field name to its input row, in display order. */
     private val rows = linkedMapOf<String, ItemFieldBinding>()
+
+    /** Behind the interface so a different transport never touches this screen. */
+    private val printer: LabelPrinter by lazy { BluetoothLabelPrinter(this) }
+
+    /** Set while a print is waiting on the Bluetooth permission prompt. */
+    private var pendingPrint: Pair<Map<String, String?>, String>? = null
+
+    private val requestBluetooth = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingPrint
+        pendingPrint = null
+        when {
+            pending == null -> Unit
+            granted -> printLabel(pending.first, pending.second)
+            else -> {
+                // The scan is already saved, so a refused permission is not
+                // fatal — it just means no label this time.
+                setBusy(false)
+                showPrintFailure(
+                    PrintResult.Failure(
+                        PrintResult.Reason.PERMISSION_DENIED,
+                        getString(R.string.print_permission_denied),
+                        retryable = false,
+                    ),
+                    pending.first,
+                    pending.second,
+                )
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -197,9 +237,11 @@ class ResultActivity : AppCompatActivity() {
             }
 
             result.fold(
-                onSuccess = {
-                    setBusy(false)
-                    finish()
+                onSuccess = { response ->
+                    // Persisted. Printing is a separate, retryable step from
+                    // here on — a print failure must never roll back a
+                    // confirmed scan (CLAUDE.md §18).
+                    printLabel(values, response.qrPayload)
                 },
                 onFailure = { error ->
                     setBusy(false)
@@ -210,6 +252,98 @@ class ResultActivity : AppCompatActivity() {
                 },
             )
         }
+    }
+
+    /**
+     * Prints the label, then records the print on the server.
+     *
+     * The scan is already committed by the time this runs. Every outcome here
+     * leaves the data intact — a failure offers a retry and an exit, and taking
+     * the exit is a legitimate choice, because the record is safe whether or
+     * not a label ever comes out.
+     */
+    private fun printLabel(values: Map<String, String?>, qrPayload: String?) {
+        if (qrPayload.isNullOrBlank()) {
+            // No payload means the server did not produce one. Printing a
+            // label with an empty QR would be worse than printing nothing.
+            setBusy(false)
+            finish()
+            return
+        }
+
+        // Checked before any permission prompt. If no printer is configured or
+        // the radio is off, the outcome is identical with or without the
+        // permission, and asking first would make the operator grant something
+        // only to be told it was pointless.
+        printer.preflight()?.let { failure ->
+            setBusy(false)
+            showPrintFailure(failure, values, qrPayload)
+            return
+        }
+
+        // BLUETOOTH_CONNECT is a runtime permission from API 31. Asked here,
+        // at the moment it is actually needed, rather than up front on a screen
+        // that may never print.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingPrint = values to qrPayload
+            requestBluetooth.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            return
+        }
+
+        binding.confirmButton.setText(R.string.result_printing)
+
+        lifecycleScope.launch {
+            val result = printer.print(
+                ConfirmedScan(
+                    scanCode = scan.scanId,
+                    fields = values,
+                    qrPayload = qrPayload,
+                )
+            )
+
+            setBusy(false)
+
+            when (result) {
+                is PrintResult.Success -> {
+                    // Recorded after the printer confirms, never before.
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            ApiClient.api.recordPrint(scan.scanId)
+                        }
+                    }.onFailure {
+                        // The label exists; only the audit note failed. Not
+                        // worth stopping the operator over.
+                        Log.w(TAG, "Print succeeded but was not recorded", it)
+                    }
+                    finish()
+                }
+
+                is PrintResult.Failure -> showPrintFailure(result, values, qrPayload)
+            }
+        }
+    }
+
+    private fun showPrintFailure(
+        failure: PrintResult.Failure,
+        values: Map<String, String?>,
+        qrPayload: String,
+    ) {
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.print_failed_title)
+            .setMessage(getString(R.string.print_failed_body, failure.message))
+            .setNegativeButton(R.string.print_skip) { _, _ -> finish() }
+
+        if (failure.retryable) {
+            builder.setPositiveButton(R.string.error_retry) { _, _ ->
+                setBusy(true)
+                printLabel(values, qrPayload)
+            }
+        }
+
+        builder.show()
     }
 
     private fun setBusy(busy: Boolean) {
@@ -230,6 +364,7 @@ class ResultActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val TAG = "ResultActivity"
         const val EXTRA_SCAN_JSON = "scan_json"
 
         private val json = Json {
