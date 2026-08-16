@@ -113,6 +113,8 @@ class ScanActivity : AppCompatActivity() {
             binding.instruction.setText(R.string.sample_mode_banner)
             binding.instructionHint.text =
                 getString(R.string.sample_mode_hint, SampleStore.count(this))
+            binding.instructionHint.backgroundTintList =
+                ContextCompat.getColorStateList(this, R.color.hint_neutral)
         } else {
             // Held shut until the framing earns it, so the backend only ever
             // receives frames worth processing. Sample collection is exempt:
@@ -262,6 +264,16 @@ class ScanActivity : AppCompatActivity() {
             }
         )
         binding.roiOverlay.setBand(band)
+        // The hint carries the same state as the brackets, so the operator can
+        // read the words without looking away from the label to check a corner.
+        binding.instructionHint.backgroundTintList = ContextCompat.getColorStateList(
+            this,
+            when (band) {
+                ReadinessTracker.Band.GOOD -> R.color.hint_good
+                ReadinessTracker.Band.FAIR -> R.color.hint_fair
+                ReadinessTracker.Band.POOR -> R.color.hint_poor
+            },
+        )
         setShutterEnabled(band == ReadinessTracker.Band.GOOD)
 
         // Fire by itself once the frame has held up for a moment. The instant a

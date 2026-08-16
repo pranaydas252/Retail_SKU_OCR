@@ -54,6 +54,23 @@
     <color name="roi_fair">#F59E0B</color>
     <color name="roi_poor">#EF4444</color>
 
+    <!--
+        Same three states, deeper, for use behind white text.
+
+        The bracket colours are tuned to stay visible as thin strokes over live
+        video, which makes them too light to sit under type: white on the bright
+        amber falls to about 2:1 contrast and is unreadable at a glance in a
+        store aisle. These are the 700-weight shades of the same hues, all above
+        4.5:1 against white, so the traffic-light reading survives while the
+        words stay legible.
+    -->
+    <color name="hint_good">#15803D</color>
+    <color name="hint_fair">#B45309</color>
+    <color name="hint_poor">#B91C1C</color>
+    <!-- Sample collection has no capture gate, so a traffic-light colour there
+         would signal a state that does not exist. Matches the instruction pill. -->
+    <color name="hint_neutral">#66000000</color>
+
     <color name="ripple_on_brand">#33FFFFFF</color>
 
 </resources>

@@ -113,12 +113,21 @@
             android:textAppearance="@style/TextAppearance.DmartOcr.Title"
             android:textColor="@android:color/white" />
 
+        <!--
+            Carries the band colour as a filled pill, so the framing state is
+            readable without looking away from the label to check the corner
+            brackets. Full opacity: this is now a signal, not a caption, and
+            fading it would undo the contrast the fill is there to provide.
+        -->
         <TextView
             android:id="@+id/instructionHint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:alpha="0.75"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_camera_pill"
+            android:backgroundTint="@color/hint_poor"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
             android:text="@string/scan_hint"
             android:textAppearance="@style/TextAppearance.DmartOcr.Body"
             android:textColor="@android:color/white" />
