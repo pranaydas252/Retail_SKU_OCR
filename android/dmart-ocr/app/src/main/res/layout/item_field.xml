@@ -15,9 +15,15 @@
        "Manufactu..." hides the one thing the operator needs: which field they
        are checking.
 
-    3. The reason line appears only when a value is doubtful. A clear field
-       stays two lines and quiet; an uncertain one spends a third line saying
-       so in words, so the signal never depends on colour alone.
+    3. The reason line always occupies its line, and is merely INVISIBLE when
+       there is nothing to say. Collapsing it made cards different heights
+       depending on how well each field happened to be read, which turned a
+       grid of five into a ragged staircase.
+
+    Every card is therefore the same height by construction rather than by a
+    hard-coded dp: a fixed two-line label, a single-line value, and a
+    single-line note. Nothing here sizes to its own content, so nothing can
+    make one card taller than its neighbour.
 -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -27,7 +33,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     app:cardBackgroundColor="@color/surface"
-    app:cardCornerRadius="14dp"
+    app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:strokeColor="@color/outline"
     app:strokeWidth="1dp">
@@ -36,9 +42,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="12dp"
-        android:paddingTop="10dp"
-        android:paddingBottom="11dp">
+        android:paddingHorizontal="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -48,18 +54,21 @@
 
             <View
                 android:id="@+id/bandDot"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginEnd="7dp"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:layout_marginTop="3dp"
+                android:layout_marginEnd="6dp"
                 android:background="@drawable/dot_high" />
 
+            <!-- lines, not maxLines: "Manufacturing date" needs two lines in a
+                 half-width cell and "MRP" needs one, and a card that sizes to
+                 its own label is a card that does not match its neighbour. -->
             <TextView
                 android:id="@+id/fieldLabel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:maxLines="2"
+                android:lines="2"
                 android:textAppearance="@style/TextAppearance.DmartOcr.FieldKey"
                 tools:text="Manufacturing date" />
 
@@ -79,6 +88,14 @@
                 tools:visibility="visible" />
         </LinearLayout>
 
+        <!--
+            Single line, and no textMultiLine.
+
+            Every value this screen carries is short by nature - a date, a
+            price, a batch code - so wrapping was only ever reachable by a bad
+            read, and letting a bad read stretch its card is the wrong response
+            to it. A long value scrolls horizontally while being edited instead.
+        -->
         <EditText
             android:id="@+id/fieldValue"
             android:layout_width="match_parent"
@@ -86,24 +103,29 @@
             android:background="@null"
             android:hint="@string/result_not_found"
             android:importantForAutofill="no"
-            android:inputType="textCapCharacters|textMultiLine"
-            android:maxLines="3"
-            android:minHeight="30dp"
-            android:paddingTop="4dp"
+            android:inputType="textCapCharacters"
+            android:maxLines="1"
+            android:minHeight="26dp"
+            android:paddingTop="2dp"
             android:paddingBottom="0dp"
             android:textAppearance="@style/TextAppearance.DmartOcr.Value"
             android:textColorHint="@color/text_tertiary"
             tools:text="2026-07" />
 
         <!-- Says WHY a value is doubtful. A band with no reason only tells the
-             operator to worry; this tells them what to look at. -->
+             operator to worry; this tells them what to look at.
+
+             Always one line, INVISIBLE rather than GONE when there is nothing
+             to say, so a well-read field does not shrink its card relative to
+             a doubtful one. -->
         <TextView
             android:id="@+id/fieldNote"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="1dp"
+            android:lines="1"
             android:textAppearance="@style/TextAppearance.DmartOcr.FieldNote"
-            android:visibility="gone"
+            android:visibility="invisible"
             tools:text="Check this"
             tools:visibility="visible" />
 

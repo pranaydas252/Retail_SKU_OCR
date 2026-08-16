@@ -82,8 +82,18 @@
     <string name="result_saved">Saved</string>
     <string name="result_saving">Saving…</string>
     <string name="result_derived">Calculated from the manufacturing date and the shelf life printed on the pack. Check it.</string>
+    <!--
+        "Needs review" and "not found" are different statements and are counted
+        separately. A field that was never read has nothing to review - saying
+        otherwise asks the operator to check a value that does not exist, and
+        on packs that genuinely do not print a lot code it flags an absence as
+        a fault.
+    -->
     <string name="result_review_count">%1$d value needs review</string>
     <string name="result_review_count_plural">%1$d values need review</string>
+    <string name="result_missing_count">%1$d field not found</string>
+    <string name="result_missing_count_plural">%1$d fields not found</string>
+    <string name="result_review_and_missing">%1$d to review · %2$d not found</string>
     <string name="result_all_clear">All values read clearly</string>
 
     <!-- Printing -->
@@ -117,10 +127,13 @@ The scan has already been saved.</string>
     <string name="field_mrp">MRP</string>
 
     <!-- Reason lines. Present only when there is something to say. -->
-    <string name="note_check">Check against the pack</string>
-    <string name="note_verify">Low confidence — verify</string>
-    <string name="note_missing">Not on the pack? Leave blank</string>
-    <string name="note_derived">Calculated from the shelf life</string>
+    <!-- One line each, inside a half-width card. Roughly 22 characters fit at
+         11sp before the text is clipped, and a clipped explanation is worse
+         than a short one. -->
+    <string name="note_check">Check against pack</string>
+    <string name="note_verify">Low confidence</string>
+    <string name="note_missing">Leave blank if absent</string>
+    <string name="note_derived">From shelf life</string>
     <string name="note_edited">Edited</string>
     <string name="note_added">You added this</string>
 

@@ -202,8 +202,12 @@ class ResultActivity : AppCompatActivity() {
         }
 
         val (dot, note, colour) = when {
+            // Neutral, not red. Nothing was read, so there is no value to be
+            // wrong about — and plenty of packs genuinely do not print a lot
+            // code. Marking an honest absence as a fault trains the operator
+            // to ignore the colour that matters.
             !field.wasFound -> Triple(
-                R.drawable.dot_low, R.string.note_missing, R.color.band_low
+                R.drawable.dot_neutral, R.string.note_missing, R.color.text_tertiary
             )
 
             field.isDerived -> Triple(
@@ -233,7 +237,12 @@ class ResultActivity : AppCompatActivity() {
      */
     private fun setNote(row: ItemFieldBinding, textRes: Int, colourRes: Int) {
         if (textRes == 0) {
-            row.fieldNote.visibility = View.GONE
+            // INVISIBLE, not GONE: the line keeps its space so a cleanly read
+            // field is exactly as tall as a doubtful one. Collapsing it made
+            // card height a function of how well each field happened to be
+            // read, which is not something the operator should have to look at.
+            row.fieldNote.visibility = View.INVISIBLE
+            row.fieldNote.text = null
             return
         }
         row.fieldNote.visibility = View.VISIBLE
@@ -253,12 +262,38 @@ class ResultActivity : AppCompatActivity() {
         updateSummary()
     }
 
+    /**
+     * One line saying whether the operator can skim or must look carefully.
+     *
+     * "Needs review" and "not found" are counted apart, because they ask for
+     * different things. A field that carries a doubtful value needs checking
+     * against the pack. A field that was never read has nothing to check — the
+     * operator either types it or, on a pack that does not print it at all,
+     * leaves it alone. Counting the two together told an operator holding a
+     * pouch with no lot code that three values needed review when one did.
+     */
     private fun updateSummary() {
-        val needingReview = scan.fields.count { (name, field) ->
-            rows.containsKey(name) && (!field.wasFound || field.band != ExtractedField.BAND_HIGH)
+        val scored = scan.fields.filterKeys { rows.containsKey(it) }
+        val needingReview = scored.count { (_, field) ->
+            field.wasFound && field.band != ExtractedField.BAND_HIGH
+        }
+        val notFound = scored.count { (_, field) -> !field.wasFound }
+
+        val summary: String? = when {
+            needingReview > 0 && notFound > 0 ->
+                getString(R.string.result_review_and_missing, needingReview, notFound)
+
+            needingReview == 1 -> getString(R.string.result_review_count, 1)
+            needingReview > 1 ->
+                getString(R.string.result_review_count_plural, needingReview)
+
+            notFound == 1 -> getString(R.string.result_missing_count, 1)
+            notFound > 1 -> getString(R.string.result_missing_count_plural, notFound)
+
+            else -> null
         }
 
-        if (needingReview == 0) {
+        if (summary == null) {
             binding.summaryBanner.setBackgroundResource(R.drawable.bg_chip_high)
             binding.summaryIcon.setImageResource(R.drawable.ic_check)
             binding.summaryIcon.imageTintList =
@@ -268,16 +303,11 @@ class ResultActivity : AppCompatActivity() {
                 ContextCompat.getColor(this, R.color.band_high)
             )
         } else {
-            val text = if (needingReview == 1) {
-                getString(R.string.result_review_count, needingReview)
-            } else {
-                getString(R.string.result_review_count_plural, needingReview)
-            }
             binding.summaryBanner.setBackgroundResource(R.drawable.bg_chip_review)
             binding.summaryIcon.setImageResource(R.drawable.ic_alert)
             binding.summaryIcon.imageTintList =
                 ContextCompat.getColorStateList(this, R.color.band_review)
-            binding.summaryText.text = text
+            binding.summaryText.text = summary
             binding.summaryText.setTextColor(
                 ContextCompat.getColor(this, R.color.band_review)
             )

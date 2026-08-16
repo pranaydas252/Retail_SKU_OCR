@@ -56,18 +56,18 @@
                 android:id="@+id/summaryBanner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/bg_chip_high"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="14dp">
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="9dp">
 
                 <ImageView
                     android:id="@+id/summaryIcon"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginEnd="12dp"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginEnd="9dp"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_check"
                     app:tint="@color/band_high" />
@@ -77,7 +77,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textAppearance="@style/TextAppearance.DmartOcr.Title"
+                    android:includeFontPadding="false"
+                    android:textAppearance="@style/TextAppearance.DmartOcr.SummaryChip"
                     android:textColor="@color/band_high"
                     tools:text="All values read clearly" />
             </LinearLayout>
