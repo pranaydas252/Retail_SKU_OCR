@@ -95,6 +95,9 @@
     <string name="result_missing_count_plural">%1$d fields not found</string>
     <string name="result_review_and_missing">%1$d to review · %2$d not found</string>
     <string name="result_all_clear">All values read clearly</string>
+    <string name="result_nothing_extracted">No fields could be read from this
+        capture. Retake it, or add the values yourself.</string>
+    <string name="add_field_suggestions">Not read from this pack</string>
 
     <!-- Printing -->
     <string name="result_printing">Printing…</string>

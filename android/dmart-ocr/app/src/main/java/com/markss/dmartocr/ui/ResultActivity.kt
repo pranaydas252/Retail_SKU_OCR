@@ -104,27 +104,43 @@ class ResultActivity : AppCompatActivity() {
     }
 
     /**
-     * Renders every field the server returned, whatever its key.
+     * Renders the fields that were actually read, whatever their keys.
      *
      * There is no hard-coded field list. The rule extractor emits five known
      * keys today, but a document-understanding model returns whatever a pack
      * actually prints, and a fixed list would silently drop anything new. The
      * server sends a displayName with each field so a key this app has never
      * seen still gets a readable label.
+     *
+     * Fields the server did not find are NOT rendered. A pouch that prints no
+     * lot code produced an empty card demanding attention for something that
+     * does not exist, and five cards on every scan regardless of the pack is
+     * the static field list this screen was built to avoid. "Add field" is the
+     * way back for anything genuinely on the pack that was missed, which is
+     * what dynamic keys were for.
+     *
+     * The count still reaches the operator through the summary line, so a
+     * missed field is reported without a card asking them to fill it in.
      */
     private fun buildFields() {
         // Worst first. The values most likely to be wrong must not sit below
         // the fold where a hurried operator will scroll past them.
         scan.fields.entries
+            .filter { (_, field) -> field.wasFound }
             .sortedBy { (_, field) ->
-                when {
-                    !field.wasFound -> 0
-                    field.band == ExtractedField.BAND_LOW -> 1
-                    field.band == ExtractedField.BAND_REVIEW -> 2
-                    else -> 3
+                when (field.band) {
+                    ExtractedField.BAND_LOW -> 0
+                    ExtractedField.BAND_REVIEW -> 1
+                    else -> 2
                 }
             }
             .forEach { (name, field) -> addRow(name, field) }
+
+        // Text was recognised but nothing was extracted from it. Without this
+        // the screen is a title, an empty grid and a confirm button, which
+        // reads as a broken app rather than as a failed read.
+        binding.emptyState.visibility =
+            if (rows.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun addRow(name: String, field: ExtractedField, userAdded: Boolean = false) {
@@ -144,6 +160,10 @@ class ResultActivity : AppCompatActivity() {
             row.removeButton.setOnClickListener {
                 binding.fieldContainer.removeView(row.root)
                 rows.remove(name)
+                // Removing the last row puts the screen back to an empty grid,
+                // which needs the explanation again.
+                binding.emptyState.visibility =
+                    if (rows.isEmpty()) View.VISIBLE else View.GONE
                 updateSummary()
             }
         }
@@ -273,11 +293,20 @@ class ResultActivity : AppCompatActivity() {
      * pouch with no lot code that three values needed review when one did.
      */
     private fun updateSummary() {
-        val scored = scan.fields.filterKeys { rows.containsKey(it) }
-        val needingReview = scored.count { (_, field) ->
-            field.wasFound && field.band != ExtractedField.BAND_HIGH
+        val needingReview = scan.fields.count { (name, field) ->
+            rows.containsKey(name) && field.band != ExtractedField.BAND_HIGH
         }
-        val notFound = scored.count { (_, field) -> !field.wasFound }
+        // Counted from what the server returned, not from what is on screen:
+        // these fields have no card, and the summary line is now the only
+        // place they are reported at all.
+        //
+        // Excluding rows the operator has since added is the point — once they
+        // have supplied the expiry themselves it is no longer missing, and a
+        // banner still asking for it would be the same nagging empty card in
+        // another form.
+        val notFound = scan.fields.count { (name, field) ->
+            !field.wasFound && !rows.containsKey(name)
+        }
 
         val summary: String? = when {
             needingReview > 0 && notFound > 0 ->
@@ -317,6 +346,44 @@ class ResultActivity : AppCompatActivity() {
     private fun showAddFieldDialog() {
         val dialogBinding = DialogAddFieldBinding.inflate(LayoutInflater.from(this))
 
+        // The exact server key for the chip the operator tapped, if any.
+        // toKey() reconstructs a key from a typed label and is good enough for
+        // a field nobody has seen before, but it must not be used where the
+        // real key is already known — "Expiry" and "Expiry date" reconstruct
+        // to different keys, and the server stores whichever it is told.
+        var chosenKey: String? = null
+
+        val missing = scan.fields
+            .filterKeys { !rows.containsKey(it) }
+            .filterValues { !it.wasFound }
+
+        if (missing.isNotEmpty()) {
+            dialogBinding.suggestionLabel.visibility = View.VISIBLE
+            dialogBinding.suggestions.visibility = View.VISIBLE
+
+            missing.forEach { (key, field) ->
+                val label = field.displayName ?: humanise(key)
+                val chip = com.google.android.material.chip.Chip(this).apply {
+                    text = label
+                    isCheckable = false
+                    setOnClickListener {
+                        chosenKey = key
+                        dialogBinding.nameInput.setText(label)
+                        dialogBinding.nameLayout.error = null
+                        dialogBinding.valueInput.requestFocus()
+                    }
+                }
+                dialogBinding.suggestions.addView(chip)
+            }
+        }
+
+        // Typing over a suggestion means the operator no longer wants the key
+        // that came with it.
+        dialogBinding.nameInput.setOnKeyListener { _, _, _ ->
+            chosenKey = null
+            false
+        }
+
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.add_field_title)
             .setView(dialogBinding.root)
@@ -336,7 +403,7 @@ class ResultActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                val key = toKey(label)
+                val key = chosenKey ?: toKey(label)
                 if (rows.containsKey(key)) {
                     dialogBinding.nameLayout.error = getString(R.string.add_field_duplicate)
                     return@setOnClickListener
@@ -351,6 +418,8 @@ class ResultActivity : AppCompatActivity() {
                     ),
                     userAdded = true,
                 )
+                binding.emptyState.visibility = View.GONE
+                updateSummary()
                 dialog.dismiss()
                 binding.scroll.post { binding.scroll.fullScroll(View.FOCUS_DOWN) }
             }
