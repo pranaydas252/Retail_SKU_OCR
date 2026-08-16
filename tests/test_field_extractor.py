@@ -253,10 +253,37 @@ class TestBarePackDates:
         assert "manufacturingDate" not in fields
         assert "expiryDate" not in fields
 
-    def test_a_future_single_date_is_read_as_expiry(self):
+    def test_a_lone_date_is_manufacture_even_when_it_is_in_the_future(self):
+        # The convention, not a deduction: a bare stamp carries batch and
+        # manufacture, or batch, manufacture and expiry, and never an expiry
+        # on its own. An earlier version decided by past-or-future, which
+        # happened to be right on the capture in front of it and would call a
+        # long-dated pack's manufacture date an expiry.
         fields = extract_fields([token("11/2035", 274, 248)])
-        assert fields["expiryDate"].normalized.value == "2035-11"
-        assert "manufacturingDate" not in fields
+        assert fields["manufacturingDate"].normalized.value == "2035-11"
+        assert "expiryDate" not in fields
+
+    def test_the_batch_printed_with_the_date_is_recovered(self):
+        # A stamp prints both together and names neither.
+        fields = extract_fields([token("MN2605121 05/26", 274, 248, 300, 39)])
+        assert fields["batchNumber"].normalized.value == "MN2605121"
+        assert fields["batchNumber"].normalized.is_ambiguous
+
+    def test_the_batch_is_found_on_the_line_beside_the_date(self):
+        fields = extract_fields([
+            token("05/26", 470, 191, 90, 30),
+            token("MN2605121", 248, 199, 200, 30),
+        ])
+        assert fields["batchNumber"].normalized.value == "MN2605121"
+
+    def test_no_batch_is_invented_without_a_date_to_anchor_to(self):
+        # Off a stamp there is nothing to anchor to, and scanning a whole
+        # label for anything code-shaped would adopt a licence number.
+        fields = extract_fields([
+            token("FT-F/2020/00002", 154, 200, 260, 30),
+            token("Guwahati", 176, 183),
+        ])
+        assert "batchNumber" not in fields
 
     def test_a_date_no_product_could_carry_is_rejected(self):
         # "2.00" is a valid calendar date to the parser - February 2000 - and
@@ -304,3 +331,79 @@ class TestBareDecimalNeedsCorroboration:
     def test_a_marked_price_needs_no_corroboration(self):
         fields = extract_fields([token("245.00/-", 300, 100)])
         assert fields["mrp"].normalized.value == "245.00"
+
+
+class TestSpatialEvidenceIsRequired:
+    """Being the only candidate is not evidence.
+
+    Both cases here come from one capture of an Eno carton whose inkjet values
+    were unreadable. With nothing legible beside the labels, the extractor
+    reached across the whole pack and adopted the toll-free number printed at
+    the bottom, producing a batch of 0008004420168 and an MRP of
+    8,004,420,168.00 on screen.
+    """
+
+    def test_a_far_below_candidate_is_not_adopted_just_for_being_alone(self):
+        fields = extract_fields([
+            token("Batch No.:", 174, 78, 190, 30),
+            token("0008004420168", 169, 400, 280, 30),
+        ])
+        assert "batchNumber" not in fields
+
+    def test_a_price_label_does_not_adopt_a_phone_number(self):
+        fields = extract_fields([
+            token("M.R.P.RS:", 174, 279, 180, 30),
+            token("0008004420168", 169, 400, 280, 30),
+        ])
+        assert "mrp" not in fields
+
+    def test_an_implausible_amount_is_rejected_even_beside_its_label(self):
+        # The magnitude gate existed only on the unlabelled path, so a labelled
+        # MRP had none at all.
+        fields = extract_fields([
+            token("M.R.P.RS:", 174, 100, 180, 30),
+            token("8004420168.00", 400, 100, 260, 30),
+        ])
+        assert "mrp" not in fields
+
+    def test_a_real_price_beside_its_label_still_works(self):
+        fields = extract_fields([
+            token("M.R.P.RS:", 174, 100, 180, 30),
+            token("245.00", 400, 100, 120, 30),
+        ])
+        assert fields["mrp"].normalized.value == "245.00"
+
+
+class TestRunTogetherDates:
+    """Two dates printed with no gap, which inkjet stamps do constantly.
+
+    This had never worked. The substitution meant to keep the first date and
+    insert a separator was written with a literal 0x01 byte where the
+    backreference should have been, so every run-together stamp had its FIRST
+    date destroyed and only the second survived — silently, because the result
+    was still a valid date.
+
+    It is the second time this project has lost a regex escape to the same
+    mechanism; the other was a `\b` that became a backspace. Both were
+    invisible in review and only showed up as accuracy.
+    """
+
+    def test_the_first_date_survives_the_split(self):
+        from app.services.field_extractor import _split_run_together_dates
+
+        assert _split_run_together_dates("22/06/2621/03/27-DB0610") == (
+            "22/06/26 21/03/27-DB0610"
+        )
+
+    def test_both_dates_are_extracted_from_one_stamp(self):
+        # Real geometry and real text from a capture whose manufacturing date
+        # was being reported as the expiry.
+        fields = extract_fields([token("22/06/2621/03/27-DB0610", 343, 222, 420, 40)])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-22"
+        assert fields["expiryDate"].normalized.value == "2027-03-21"
+
+    def test_no_stray_control_character_reaches_a_value(self):
+        from app.services.field_extractor import _split_run_together_dates
+
+        assert "\x01" not in _split_run_together_dates("16/06/2615/12/27")

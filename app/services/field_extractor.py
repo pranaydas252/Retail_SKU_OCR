@@ -266,6 +266,33 @@ def _spatial_score(label: OcrToken, candidate: OcrToken, strategy: str) -> float
     return max(0.0, 0.85 - gap / 10.0)
 
 
+#: A candidate scoring this or less has no spatial evidence behind it.
+#:
+#: The score already falls to zero once a candidate is absurdly far from its
+#: label, but zero was still being accepted whenever nothing else competed —
+#: and on a pack whose values are unreadable, nothing else does. That is how
+#: "M.R.P.RS:" adopted the toll-free number printed 121px below it, and
+#: "Batch No.:" adopted the same number from 322px away.
+#:
+#: Being the only candidate is not evidence. Returning nothing is the correct
+#: answer when the value beside the label could not be read.
+_MIN_SPATIAL_SCORE = 0.0
+
+#: What a retail pack price can be, in rupees.
+#:
+#: Shared by both the labelled and unlabelled paths. Only the unlabelled one
+#: used to check it, so a labelled MRP had no magnitude gate at all and
+#: "M.R.P.RS:" beside a phone number produced an MRP of 8,004,420,168.00.
+_MIN_PRICE = 1.0
+_MAX_PRICE = 100000.0
+
+
+def _plausible_price(value: str) -> bool:
+    if not _numeric(value):
+        return False
+    return _MIN_PRICE <= float(value.replace(",", "")) <= _MAX_PRICE
+
+
 def _find_label_matches(
     tokens: list[OcrToken], spec: FieldSpec
 ) -> list[tuple[int, str, float, str]]:
@@ -597,9 +624,7 @@ def _infer_unlabelled(
             value = match.group(1) or match.group(2) or match.group(3)
             # A retail pack price sits in a sane range. Outside it the number
             # is a weight, a licence number or a phone number.
-            if not value or not _numeric(value):
-                continue
-            if not 1.0 <= float(value.replace(",", "")) <= 100000:
+            if not value or not _plausible_price(value):
                 continue
             # A date is not a price. "2.06.2028" contains "2.06", which the
             # bare-decimal branch reads as two rupees six paise.
@@ -652,30 +677,122 @@ def _infer_unlabelled(
             )
         return
 
-    if len(unique) == 1:
-        # One date, and nothing on the pack to say which field it is.
+    if len(unique) == 1 and "manufacturingDate" not in results:
+        # One date on the stamp is the manufacturing date.
         #
-        # A jar stamped "MN2605121 05/26" was returning no date at all, because
-        # the pairing rule above needs two. The value had been recognised at
-        # 0.94 confidence and was then thrown away for being alone.
+        # This is the printing convention, not a deduction: a bare stamp
+        # carries batch and manufacture, or batch, manufacture and expiry, and
+        # never an expiry on its own. An earlier version decided this by
+        # whether the date was in the past, which got the right answer on the
+        # capture in front of it for the wrong reason and would have called a
+        # long-dated pack's manufacture date an expiry.
         #
-        # Whether it is manufacture or expiry is decided by the calendar, which
-        # is the only evidence present: goods on a shelf were made in the past
-        # and expire in the future. It is a guess about the FIELD, never about
-        # the value — the date itself was read, not invented — and it is marked
-        # ambiguous so it lands in operator review rather than being trusted.
+        # Still marked ambiguous. The value was read, not invented, but which
+        # field it belongs to is positional, so it belongs in operator review.
         only = unique[0]
-        field = "manufacturingDate" if only[0] <= date.today().isoformat() else "expiryDate"
-        if field not in results:
-            results[field] = _inferred(
-                field, only[1],
+        results["manufacturingDate"] = _inferred(
+            "manufacturingDate", only[1],
+            normalizer.NormalizedValue(
+                only[0], is_ambiguous=True,
+                notes=["inferred: the only date on an unlabelled stamp, which "
+                       "by convention is the manufacturing date"],
+            ),
+            only[2],
+        )
+
+    _infer_stamp_batch(tokens, results, unique)
+
+
+#: A code that could be a batch number on a bare stamp.
+#:
+#: Letters and digits together, or a digit run of moderate length. A pure word
+#: is prose and a very long digit run is a phone number, a licence or a GTIN.
+_STAMP_CODE = re.compile(r"^(?=.*[0-9])[A-Z0-9][A-Z0-9\-/]{3,15}$", re.IGNORECASE)
+
+#: How far from the date, in multiples of the date token's own height, a batch
+#: code can sit and still belong to the same stamp.
+_STAMP_PROXIMITY = 2.5
+
+
+def _infer_stamp_batch(
+    tokens: list[OcrToken],
+    results: dict[str, FieldCandidate],
+    dated: list[tuple[str, str, OcrToken]],
+) -> None:
+    """Recover the batch code from a stamp that carries no field names.
+
+    A bare stamp always prints a batch number alongside the manufacturing
+    date — that is the printing convention, and it is why a jar stamped
+    "MN2605121 05/26" should yield both rather than only the date.
+
+    The date is what makes this safe to attempt. Rather than scanning the whole
+    label for anything code-shaped, which would adopt a licence number or a
+    postcode on any pack that prints one, the search is anchored to the token
+    the date came from: the same token first, then its immediate neighbours.
+    Off a stamp there is nothing to anchor to and nothing is inferred.
+    """
+    if "batchNumber" in results or not dated:
+        return
+
+    _, raw_date, date_token = dated[0]
+    all_aliases = {
+        _canonical(alias) for spec in load_field_specs() for alias in spec.aliases
+    }
+
+    def usable(text: str) -> str | None:
+        candidate = text.strip(" .,:;-")
+        if not _STAMP_CODE.match(candidate):
+            return None
+        if _canonical(candidate) in _BOILERPLATE or _canonical(candidate) in all_aliases:
+            return None
+        # A date, a time or a price is not a batch code.
+        if _DATE_TOKEN.search(candidate) or ":" in candidate:
+            return None
+        if _MONEY_MENTION.search(candidate):
+            return None
+        normalized = normalizer.normalize(candidate, "code")
+        return normalized.value if normalized.ok else None
+
+    # The stamp usually prints both in one run: "MN2605121 05/26".
+    remainder = date_token.text.replace(raw_date, " ")
+    for part in remainder.split():
+        value = usable(part)
+        if value:
+            results["batchNumber"] = _inferred(
+                "batchNumber", part,
                 normalizer.NormalizedValue(
-                    only[0], is_ambiguous=True,
-                    notes=["inferred: the only printed date, assigned by whether "
-                           "it is in the past or the future"],
+                    value, is_ambiguous=True,
+                    notes=["inferred: printed with the date on an unlabelled stamp"],
                 ),
-                only[2],
+                date_token,
             )
+            return
+
+    # Otherwise the line above or below it, within the same stamp block.
+    reach = max(date_token.height, 1) * _STAMP_PROXIMITY
+    neighbours = sorted(
+        (
+            token for token in tokens
+            if token is not date_token
+            and abs(_centre_y(token) - _centre_y(date_token)) <= reach
+        ),
+        key=lambda token: abs(_centre_y(token) - _centre_y(date_token)),
+    )
+
+    for token in neighbours:
+        for part in token.text.split():
+            value = usable(part)
+            if value:
+                results["batchNumber"] = _inferred(
+                    "batchNumber", part,
+                    normalizer.NormalizedValue(
+                        value, is_ambiguous=True,
+                        notes=["inferred: printed beside the date on an "
+                               "unlabelled stamp"],
+                    ),
+                    token,
+                )
+                return
 
 
 #: Two dates printed with no gap between them. Inkjet stamps run fields
@@ -688,7 +805,7 @@ _RUN_TOGETHER = re.compile(
 
 def _split_run_together_dates(text: str) -> str:
     """Insert a separator between two dates printed with no gap."""
-    return _RUN_TOGETHER.sub(r" ", text)
+    return _RUN_TOGETHER.sub(r"\1 ", text)
 
 
 def _numeric(value: str) -> bool:
@@ -822,8 +939,13 @@ def _best_neighbour(
             continue
         if spec.value_type == "date" and not _plausible_pack_date(normalized.value):
             continue
+        if spec.value_type == "currency" and not _plausible_price(normalized.value):
+            continue
 
-        scored.append((_spatial_score(label, candidate, strategy), candidate, normalized))
+        score = _spatial_score(label, candidate, strategy)
+        if score <= _MIN_SPATIAL_SCORE:
+            continue
+        scored.append((score, candidate, normalized))
 
     if not scored:
         return None
