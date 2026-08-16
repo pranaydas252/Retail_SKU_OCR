@@ -14,23 +14,41 @@ the extraction and normalization logic layered on top of it, not the OCR model.
 So this directory holds one thing: real label images shot on the TC22, plus
 their transcribed ground truth.
 
-## The two corpora
+## Status: empty, awaiting a fresh collection
 
-| File | Images | What it is |
-| --- | --- | --- |
-| `roi_labels.json` | 15, in `roi/` | **The one that counts.** ROI crops taken through the app itself, which is exactly what the backend receives. |
-| `real_labels.json` | 9, in `real/` | Full-frame photographs, from before the app existed. Harder and unrepresentative — the app crops to the ROI window before uploading. Kept because the transcription is hand work that cannot be regenerated cheaply. |
+The previous corpus — 15 ROI crops and 9 full-frame photographs — was deleted
+on 2026-08-16. It predated three changes that alter what the backend actually
+receives:
 
-Both were originally kept under `images/`, which is the **runtime scan output
-directory**: git-ignored, written to by every scan, and safe to delete. An
-evaluation corpus living there is one cleanup away from being lost, so it lives
-here instead.
+- capture is now gated on a readiness score, so a frame nobody would have kept
+  never reaches the server
+- the crop is deskewed on-device before upload
+- the readiness analysis runs at 1280x720 rather than 640x480
 
-Run the accuracy gate against either:
+Measuring a recognition engine against captures taken before all three would
+produce a number that does not describe production. The old ground-truth
+transcriptions remain in git history if a comparison is ever wanted.
+
+**Until this directory is refilled there is no accuracy gate.** That is the
+accepted cost of replacing the corpus rather than mixing two distributions.
+
+## Collecting a new one
+
+Turn on **sample collection** in the app's settings dialog. Captures are then
+saved to the device instead of being uploaded, and the camera stays put between
+shots so a shelf can be worked through in one pass.
+
+```bat
+adb pull /sdcard/Android/data/com.markss.dmartocr/files/Pictures/samples sample_data\roi
+python scripts\scaffold_ground_truth.py
+```
+
+The scaffold writes `roi_labels.json` with one entry per image and the field
+names already in place, so the transcription is filling in values rather than
+typing structure. Then:
 
 ```bat
 python scripts\measure_accuracy.py
-python scripts\measure_accuracy.py --truth sample_data\real_labels.json
 ```
 
 ## Ground-truth conventions

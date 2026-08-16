@@ -1,0 +1,9 @@
+Read all printed and stamped text in this image.
+
+Output one line per printed line, in reading order. Preserve the characters
+exactly as printed, including dates, prices and codes. Do not normalize, do not
+translate, do not explain, do not repeat a line.
+
+Pay particular attention to inkjet and dot-matrix stamps, which are often
+lower contrast than the printing around them and carry the batch number and
+the dates.

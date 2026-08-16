@@ -113,19 +113,22 @@ class ScanActivity : AppCompatActivity() {
         binding.torchButton.setOnClickListener { toggleTorch() }
         binding.captureButton.setOnClickListener { capture() }
 
-        if (AppPreferences.sampleMode) {
-            binding.instruction.setText(R.string.sample_mode_banner)
-            binding.instructionHint.text =
-                getString(R.string.sample_mode_hint, SampleStore.count(this))
-            binding.instructionHint.backgroundTintList =
-                ContextCompat.getColorStateList(this, R.color.hint_neutral)
-        } else {
-            // Held shut until the framing earns it, so the backend only ever
-            // receives frames worth processing. Sample collection is exempt:
-            // its whole purpose is to gather difficult images, including the
-            // ones the gate would reject.
-            setShutterEnabled(false)
-        }
+        if (AppPreferences.sampleMode) showSampleCount()
+
+        // Held shut until the framing earns it, in BOTH modes.
+        //
+        // Sample collection used to be exempt, on the reasoning that its
+        // purpose is to gather difficult images including ones the gate would
+        // reject. That was wrong, and the accuracy numbers show why: a corpus
+        // collected without the gate is not the input the backend receives,
+        // because in production the gate is what decides which frames exist at
+        // all. Measuring a recognition engine against frames that could never
+        // reach it produces a number describing nothing.
+        //
+        // So samples are captured exactly as scans are — same score, same
+        // hysteresis, same auto-capture — and differ only in what happens
+        // afterwards.
+        setShutterEnabled(false)
 
         positionInstructionAboveRoi()
 
@@ -279,7 +282,7 @@ class ScanActivity : AppCompatActivity() {
      */
     private fun onQuality(reading: LabelQuality) {
         quality = reading
-        if (capturing || AppPreferences.sampleMode) return
+        if (capturing) return
 
         val now = android.os.SystemClock.elapsedRealtime()
         val band = readiness.update(reading, now)
@@ -460,7 +463,7 @@ class ScanActivity : AppCompatActivity() {
         // would re-arm the shutter — and with auto-capture, immediately fire it
         // again on a frame nobody has looked at since the failure.
         readiness.reset()
-        if (!AppPreferences.sampleMode) setShutterEnabled(false)
+        setShutterEnabled(false)
         analyzer?.enabled = true
     }
 
@@ -483,11 +486,25 @@ class ScanActivity : AppCompatActivity() {
             return
         }
 
+        showSampleCount()
         Toast.makeText(
             this,
             getString(R.string.sample_saved, total),
             Toast.LENGTH_SHORT,
         ).show()
+    }
+
+    /**
+     * Running total in the top line.
+     *
+     * The hint below it now carries the readiness state in both modes, which
+     * is where the count used to live, and a count is what tells the operator
+     * how far through a collection run they are.
+     */
+    private fun showSampleCount() {
+        binding.instruction.text = getString(
+            R.string.sample_mode_banner_count, SampleStore.count(this)
+        )
     }
 
     private fun upload(bytes: ByteArray) {

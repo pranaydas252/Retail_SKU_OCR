@@ -84,6 +84,60 @@ class Settings(BaseSettings):
     # each variant costs a full OCR pass.
     ocr_variants: str = "original"
 
+    # --- Vision-language model (Phase 7) ---------------------------------
+    #
+    # A second recognition engine, for the print PP-OCRv5 cannot read at all.
+    # Measured on a TC22 capture of an Eno carton: the printed field names came
+    # back at 0.95-0.99 confidence and the inkjet values beside them at
+    # 0.05-0.53, as "Phm", "Voow", "JAND". Three PP-OCRv5 recognition models
+    # were tried and none read them. That gap is not closable with rules.
+    #
+    # Off by default. Nothing about the existing pipeline changes until this is
+    # measured against a corpus, and the corpus is being recollected.
+    vlm_enabled: bool = False
+    vlm_base_url: str = "http://127.0.0.1:11434"
+    vlm_model: str = "hf.co/PaddlePaddle/PaddleOCR-VL-1.5-GGUF:latest"
+    vlm_timeout_seconds: int = 180
+
+    # How the model is asked, which is a property of the model and not a
+    # preference. Measured 2026-08-16: PaddleOCR-VL ignores an instruction to
+    # return JSON entirely — it is a transcription model and answers by reading
+    # the image aloud, returning "The Manager, GSK Consumer Relations..." to a
+    # prompt demanding a JSON object. qwen2.5vl follows instructions and can be
+    # asked for fields directly.
+    #
+    #   transcribe  the model reads the image; our own extractor finds the
+    #               fields in the text, exactly as it does for PP-OCRv5
+    #   json        the model reports the fields itself
+    vlm_mode: str = "transcribe"
+    vlm_prompt_transcribe: Path = (
+        PROJECT_ROOT / "config" / "vlm_prompts" / "transcribe.txt"
+    )
+    vlm_prompt_json: Path = (
+        PROJECT_ROOT / "config" / "vlm_prompts" / "fields_compact.txt"
+    )
+
+    @property
+    def vlm_prompt(self) -> Path:
+        return (
+            self.vlm_prompt_json if self.vlm_mode == "json"
+            else self.vlm_prompt_transcribe
+        )
+
+    # Deliberately NOT ocr_det_limit_side_len. That 960 is PP-OCRv5's detector
+    # limit; a vision-language model has no detector and reads the whole image
+    # at a fixed token budget, so the two have no reason to share a number.
+    # 1600 keeps a 2692x1224 ROI crop legible without the cost of full size.
+    vlm_max_side: int = 1600
+
+    # Guards against degenerate generation, both measured. Vision models on
+    # dense label text fall into repeat loops - emitting "1.00 2.00 3.00..."
+    # or LaTeX - and a capped prediction length with a repeat penalty took one
+    # model from 25.3s to 3.3s per image with no loss of real output.
+    vlm_max_tokens: int = 220
+    vlm_repeat_penalty: float = 1.15
+    vlm_temperature: float = 0.0
+
     # --- Field extraction (Phase 2) --------------------------------------
     field_alias_config: Path = PROJECT_ROOT / "config" / "field_aliases.yaml"
     confidence_high_threshold: float = 0.95

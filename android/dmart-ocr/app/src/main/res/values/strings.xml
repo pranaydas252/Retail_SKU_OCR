@@ -57,6 +57,7 @@
 
     <!-- Sample collection -->
     <string name="sample_mode_banner">Sample collection — not sent to server</string>
+    <string name="sample_mode_banner_count">Sample collection — %1$d saved</string>
     <string name="sample_mode_hint">%1$d saved so far</string>
     <string name="sample_saved">Saved. %1$d samples collected.</string>
     <string name="sample_save_failed">Could not save the sample to this device.</string>
