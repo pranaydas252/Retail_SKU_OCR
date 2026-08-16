@@ -84,7 +84,34 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // Sample captures for the ML Kit benchmark travel inside the test APK.
+    //
+    // Pushing them to the device was the obvious approach and does not work:
+    // /sdcard/Android/data/<pkg>/ is behind Android's scoped-storage FUSE
+    // layer, so files written by `adb push` are owned by the shell user and
+    // the app cannot list them. Bundling sidesteps the filesystem entirely and
+    // removes the install-then-push-then-instrument ordering trap, where a
+    // reinstall silently wiped the pushed files.
+    //
+    // The source directory is git-ignored, so no image binaries enter the
+    // repository and a fresh clone still builds — the benchmark simply finds
+    // no captures and says so.
+    sourceSets.getByName("androidTest").assets.srcDir(
+        layout.buildDirectory.dir("generated/benchAssets")
+    )
 }
+
+val benchCaptures = tasks.register<Copy>("copyBenchCaptures") {
+    description = "Stages sample label captures into the androidTest assets."
+    from(rootProject.file("../../images")) { include("SAMPLE_*.jpg") }
+    into(layout.buildDirectory.dir("generated/benchAssets/bench_in"))
+}
+
+tasks.matching { it.name.startsWith("generateDebugAndroidTestAssets") }
+    .configureEach { dependsOn(benchCaptures) }
+tasks.matching { it.name.startsWith("mergeDebugAndroidTestAssets") }
+    .configureEach { dependsOn(benchCaptures) }
 
 dependencies {
     // Zebra Link-OS Multiplatform SDK (ZSDK), for ZQ320 printing over Bluetooth
@@ -128,4 +155,17 @@ dependencies {
     testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.espresso.core)
+
+    // ML Kit text recognition, for the on-device OCR benchmark
+    // (MlKitBenchTest). debugImplementation, not implementation: whether
+    // on-device OCR replaces the server pipeline is still an open question, so
+    // this must not reach the release APK until the numbers justify it.
+    //
+    // It cannot be androidTestImplementation either. ML Kit bootstraps from a
+    // ContentProvider and needs a context with an application context; an
+    // instrumented test runs in the app-under-test's process, where the test
+    // APK's providers never start and its context has no Application. Putting
+    // the library in the debug app lets it initialise normally and the test
+    // simply uses it.
+    debugImplementation(libs.mlkit.text.recognition)
 }
