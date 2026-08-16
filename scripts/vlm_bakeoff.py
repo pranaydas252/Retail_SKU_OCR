@@ -58,6 +58,22 @@ def tier_of(field: str) -> str:
     return "core" if field in CORE_FIELDS else "code"
 
 
+#: Short keys a prompt may use, mapped onto the schema the server speaks.
+#: Shorter keys cost fewer tokens and read more naturally to a model, but
+#: nothing downstream should have to know that.
+KEY_ALIASES = {
+    "mfd": "manufacturingDate",
+    "mfg": "manufacturingDate",
+    "exp": "expiryDate",
+    "batch": "batchNumber",
+    "lot": "lotCode",
+}
+
+
+def canonical_keys(raw: dict) -> dict:
+    return {KEY_ALIASES.get(k, k): v for k, v in raw.items()}
+
+
 # Asks for exactly the fields the POC needs, in the normalized form the server
 # already produces, and forbids guessing. "Not printed" has to be answerable,
 # because a pack that genuinely lacks an MRP is a real case and inventing one
@@ -250,10 +266,11 @@ def ask_transcription(
     return fields, elapsed, text
 
 
-def ask(model: str, image: Path, timeout: int, max_side: int) -> tuple[dict, float]:
+def ask(model: str, image: Path, timeout: int, max_side: int,
+        prompt: str = PROMPT) -> tuple[dict, float]:
     payload = json.dumps({
         "model": model,
-        "prompt": PROMPT,
+        "prompt": prompt,
         "images": [encode(image, max_side)],
         "stream": False,
         "format": "json",
@@ -279,7 +296,7 @@ def ask(model: str, image: Path, timeout: int, max_side: int) -> tuple[dict, flo
     elapsed = time.perf_counter() - started
 
     try:
-        return json.loads(body.get("response", "{}")), elapsed
+        return canonical_keys(json.loads(body.get("response", "{}"))), elapsed
     except json.JSONDecodeError:
         return {}, elapsed
 
@@ -298,8 +315,14 @@ def main() -> int:
     parser.add_argument("--mode", choices=("json", "transcribe"), default="json",
                         help="ask the model for fields, or transcribe and let "
                              "the server's rules extract them")
+    parser.add_argument("--prompt-file", type=Path,
+                        help="read the JSON-mode prompt from this file")
     parser.add_argument("--json", help="write raw model output here")
     args = parser.parse_args()
+
+    prompt = (
+        args.prompt_file.read_text(encoding="utf-8") if args.prompt_file else PROMPT
+    )
 
     truth = json.loads(TRUTH.read_text(encoding="utf-8"))
     entries = truth["images"][: args.limit] if args.limit else truth["images"]
@@ -321,7 +344,9 @@ def main() -> int:
                     args.model, path, args.timeout, args.max_side
                 )
             else:
-                got, elapsed = ask(args.model, path, args.timeout, args.max_side)
+                got, elapsed = ask(
+                    args.model, path, args.timeout, args.max_side, prompt
+                )
         except (urllib.error.URLError, TimeoutError) as exc:
             print(f"{path.name:32s} FAILED: {exc}", file=sys.stderr)
             continue

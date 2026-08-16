@@ -1,0 +1,31 @@
+Extract the following product-label fields from the image:
+
+`mrp`, `mfd`, `exp`, `batch`, `lot`
+
+Return ONLY valid JSON. No explanation, markdown, or extra text.
+
+Rules:
+
+* Extract only clearly visible values.
+* Match each value to its nearby label.
+* `mfd`: manufacturing date.
+* `exp`: expiry date, use-by date, or best-before date.
+* `batch`: batch number.
+* `lot`: lot number.
+* `mrp`: the maximum retail price. Packs print a smaller per-unit price
+  beside it, such as "₹0.45/g" or after "USP:". The MRP is the LARGER
+  figure; anything followed by /g, /gm, /ml, /kg or labelled USP is never
+  the MRP.
+* Some packs print no field names at all, only a bare stamp such as
+  "₹190/- ₹0.25/g SB3114C 08/10/25 07/10/26". When there are two dates and
+  no labels, the EARLIER is `mfd` and the LATER is `exp`.
+* If the pack prints a single combined "Lot / Batch No.", put it in `batch`
+  and omit `lot`.
+* Read rotated, stamped, dot-matrix and low-contrast text.
+* Preserve values exactly as printed. Do not normalize dates, prices, or codes.
+* Do not guess or infer missing values.
+* Omit fields that are not visible or unclear.
+* Ignore all other text.
+
+Example:
+{"mrp":"₹90","mfd":"22/06/26","exp":"21/03/27","batch":"AB123","lot":"L45"}
