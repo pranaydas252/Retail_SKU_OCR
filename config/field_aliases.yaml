@@ -90,3 +90,18 @@ confidence_weights:
 # Penalty applied to a date resolved under an assumed convention rather than
 # an unambiguous one. See normalizer.py.
 ambiguous_date_penalty: 0.25
+
+# Two-engine agreement, when the VLM runs alongside PP-OCRv5. See ensemble.py.
+#
+# Measured on the earlier corpus: 23 of 50 values were answered by exactly one
+# of the two engines, and merging only where they agreed gave 2 wrong values
+# against 14 for a naive union. Agreement is therefore worth more than either
+# engine's own confidence, and disagreement is worth more than either engine's
+# doubt.
+#
+# The bonus closes a fraction of the remaining gap to 1.0 rather than adding a
+# fixed amount, so corroboration cannot carry a field that every other signal
+# rates poorly. Both are engineering defaults and must be tuned once the new
+# corpus exists — they have never been measured.
+engine_agreement_bonus: 0.15
+engine_conflict_penalty: 0.35

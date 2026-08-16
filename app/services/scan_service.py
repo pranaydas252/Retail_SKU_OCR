@@ -26,12 +26,14 @@ from app.models.response_models import (
 )
 from app.services import (
     confidence,
+    ensemble,
     field_extractor,
     image_service,
     normalizer,
     validator,
 )
 from app.services.ocr_service import OcrToken, get_ocr_service
+from app.services.vlm_service import get_vlm_service
 from app.utils.logging import StageTimer
 
 logger = logging.getLogger(__name__)
@@ -101,16 +103,40 @@ def process_scan(
                 extra={**log_context, "variant": variant},
             )
 
+    # Second engine, for the print PP-OCRv5 cannot read (CLAUDE.md section 2).
+    #
+    # It runs on the ORIGINAL image, not the variant PP-OCRv5 was given: the
+    # 960 downscale is a detector limit and a vision-language model has no
+    # detector. It is also best-effort — several seconds of model time must
+    # never cost the operator a scan PP-OCRv5 already answered, so a failure
+    # here is logged and the primary result stands.
+    vlm_tokens: list[OcrToken] = []
+    if should_run_vlm(tokens, s):
+        with timer.stage("vlmMs"):
+            try:
+                vlm_tokens = get_vlm_service().tokens(image)
+            except Exception as exc:
+                logger.warning(
+                    "VLM read failed; continuing with the primary engine",
+                    extra={**log_context, "error": str(exc)},
+                )
+
     fields: dict[str, ExtractedField] = {}
     overall_confidence: float | None = None
 
-    if tokens:
+    if tokens or vlm_tokens:
         with timer.stage("extractMs"):
-            fields, overall_confidence = extract_and_score(tokens)
+            fields, overall_confidence = extract_and_score(tokens, vlm_tokens)
 
     timings = timer.as_dict()
+    # Either engine reading something means the scan succeeded. Keying this to
+    # PP-OCRv5 alone would tell the operator to recapture a label the second
+    # engine had just read perfectly — which is precisely the case the second
+    # engine exists for.
     status = (
-        ProcessingStatus.COMPLETED if tokens else ProcessingStatus.NO_TEXT_DETECTED
+        ProcessingStatus.COMPLETED
+        if (tokens or vlm_tokens)
+        else ProcessingStatus.NO_TEXT_DETECTED
     )
 
     # Persist best-effort. A database outage must not throw away several
@@ -171,6 +197,36 @@ def process_scan(
             else "No text was detected. Ask the operator to recapture the label."
         ),
     )
+
+
+#: The fields the fallback trigger counts. Section 24's core tier: they have a
+#: shape a recogniser can check itself against, they are printed on essentially
+#: every pack, and they carry the accuracy target. Batch and lot are excluded
+#: deliberately — they are arbitrary strings that are often genuinely absent,
+#: so counting them would fire the slow engine on packs that are already fine.
+_CORE_FIELDS = ("mrp", "manufacturingDate", "expiryDate")
+
+
+def should_run_vlm(tokens: list[OcrToken], settings: Settings) -> bool:
+    """Whether the second engine is worth its latency on this scan.
+
+    Running it on everything costs roughly two minutes a scan against 2.2s for
+    a pack PP-OCRv5 handles, so the default is to spend that only where the
+    primary engine came up short. The decision is made on the PRIMARY result,
+    which is why this is called after OCR and not before.
+    """
+    if not settings.vlm_enabled or settings.vlm_trigger == "never":
+        return False
+    if settings.vlm_trigger == "always":
+        return True
+
+    # No text at all is the clearest case for a second opinion.
+    if not tokens:
+        return True
+
+    found = field_extractor.extract_fields(tokens)
+    core_found = sum(1 for name in _CORE_FIELDS if name in found)
+    return core_found < settings.vlm_fallback_below_core_fields
 
 
 def confirm_scan(
@@ -315,6 +371,7 @@ def display_name(key: str) -> str:
 
 def extract_and_score(
     tokens: list[OcrToken],
+    secondary_tokens: list[OcrToken] | None = None,
 ) -> tuple[dict[str, ExtractedField], float | None]:
     """Extract, validate, and score fields from OCR tokens.
 
@@ -322,8 +379,21 @@ def extract_and_score(
     found — those carry a null value so the Android UI can render an explicit
     empty box for the operator rather than silently omitting the field
     (CLAUDE.md section 11).
+
+    ``secondary_tokens`` are a second engine's reading of the same image. Both
+    go through this identical extraction path, which is the point: a number
+    produced by a separate path would not be comparable, and comparability is
+    the reason for running two engines at all. Where they agree the field is
+    corroborated; where they disagree it is pushed towards review rather than
+    resolved by a tie-break nobody can predict.
     """
-    candidates = field_extractor.extract_fields(tokens)
+    primary = field_extractor.extract_fields(tokens)
+    secondary = (
+        field_extractor.extract_fields(secondary_tokens) if secondary_tokens else {}
+    )
+    merged = ensemble.merge(primary, secondary)
+    candidates = {name: field.candidate for name, field in merged.items()}
+
     specs = {spec.name: spec for spec in field_extractor.load_field_specs()}
 
     values = {
@@ -353,10 +423,18 @@ def extract_and_score(
             scores[name] = 0.0
             continue
 
+        merged_field = merged[name]
+        # None when no second opinion exists, so a single-engine scan scores
+        # exactly as it did before the ensemble was added.
+        agreement = (
+            merged_field.agreed if len(merged_field.engines) > 1 else None
+        )
+
         score = confidence.score_field(
             candidate,
             format_ok=validation.is_valid(name),
             consistency_ok=validation.consistency_ok,
+            agreement=agreement,
         )
         scores[name] = score
         found.add(name)
@@ -369,6 +447,8 @@ def extract_and_score(
             rawValue=candidate.raw_value,
             displayName=display_name(name),
             expected=True,
+            engines=list(merged_field.engines),
+            conflictValue=merged_field.conflict,
         )
 
     return fields, confidence.overall(scores, found)

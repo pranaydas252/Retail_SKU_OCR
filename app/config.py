@@ -96,6 +96,27 @@ class Settings(BaseSettings):
     # measured against a corpus, and the corpus is being recollected.
     vlm_enabled: bool = False
     vlm_base_url: str = "http://127.0.0.1:11434"
+
+    # When the second engine runs.
+    #
+    # Latency is the reason this is not simply "always". Measured on the
+    # reference machine, one qwen2.5vl:3b pass took 25s in isolation and 99-120s
+    # with PP-OCRv5 competing for the same CPU — against a 2.2s end-to-end scan
+    # on a pack PP-OCRv5 handles. Paying two minutes on every scan to rescue the
+    # minority of packs that need it would make the fast case unusable to save
+    # the slow one.
+    #
+    #   fallback  run only when the primary engine came up short. Good packs
+    #             stay at PP-OCRv5 speed; hard ones pay for what they need.
+    #   always    run on every scan, so both engines answer and agreement is
+    #             available on every field. For measurement, not for an aisle.
+    #   never     equivalent to vlm_enabled = False
+    vlm_trigger: str = "fallback"
+
+    # What "came up short" means: fewer than this many of the three core fields
+    # (MRP, manufacturing date, expiry date) extracted. Two of three is a pack
+    # that mostly worked; one or none is the case worth two minutes of model.
+    vlm_fallback_below_core_fields: int = 2
     # qwen2.5vl:3b, chosen on measurement rather than on name.
     #
     #   engine                        core   Eno inkjet stamp

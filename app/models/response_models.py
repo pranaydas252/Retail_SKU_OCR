@@ -80,6 +80,17 @@ class ExtractedField(BaseModel):
     source: str = "OCR_RULES"
     raw_value: str | None = Field(default=None, alias="rawValue")
     display_name: str | None = Field(default=None, alias="displayName")
+
+    #: Which recognition engines produced this value: "OCR", "VLM", or both.
+    #:
+    #: Diagnostic, and additive on the wire — the app ignores unknown keys, so
+    #: this reaches the debugging workflow without an app release. Two engines
+    #: agreeing is the strongest signal available for a field (section 12), and
+    #: an engineer looking at a bad scan needs to know which one answered.
+    engines: list[str] = Field(default_factory=list)
+
+    #: What the other engine read, when the two disagreed. None otherwise.
+    conflict_value: str | None = Field(default=None, alias="conflictValue")
     #: True for the core fields the POC always asks about, so the app can show
     #: them as empty rather than omitting them when a pack lacks one.
     expected: bool = False

@@ -44,12 +44,36 @@ def _ambiguity_penalty() -> float:
     return float(load_config().get("ambiguous_date_penalty", 0.25))
 
 
+def _agreement_bonus() -> float:
+    return float(load_config().get("engine_agreement_bonus", 0.15))
+
+
+def _conflict_penalty() -> float:
+    return float(load_config().get("engine_conflict_penalty", 0.35))
+
+
 def score_field(
     candidate: FieldCandidate,
     format_ok: bool,
     consistency_ok: bool,
+    agreement: bool | None = None,
 ) -> float:
-    """Confidence for one extracted field, in [0, 1]."""
+    """Confidence for one extracted field, in [0, 1].
+
+    ``agreement`` is the two-engine signal, and is None when only one engine
+    ran or only one produced this field:
+
+        True   both engines read the same value
+        False  both produced a value and they differ
+        None   no second opinion exists
+
+    Section 12 lists cross-variant agreement as a confidence signal, and two
+    independent engines are a stronger version of the same idea. It is applied
+    as an adjustment rather than a weighted signal because it is frequently
+    absent, and a weight would have to be silently redistributed every time —
+    which would make two scans with the same evidence score differently for
+    reasons nobody could see.
+    """
     weights = _weights()
 
     signals = {
@@ -67,6 +91,16 @@ def score_field(
     # pushes it into the operator's review band instead of silent acceptance.
     if candidate.normalized.is_ambiguous:
         score *= 1.0 - _ambiguity_penalty()
+
+    # Two engines that read the same string are hard to fool at once, and two
+    # that read different strings have told us one of them is wrong without
+    # saying which. The bonus closes part of the remaining gap rather than
+    # adding a fixed amount, so corroboration can never carry a field that
+    # every other signal rates poorly.
+    if agreement is True:
+        score += (1.0 - score) * _agreement_bonus()
+    elif agreement is False:
+        score *= 1.0 - _conflict_penalty()
 
     return round(max(0.0, min(1.0, score)), 4)
 
