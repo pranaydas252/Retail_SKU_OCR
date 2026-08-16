@@ -271,11 +271,21 @@ def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
 
 
 #: Curated labels for the fields the rule extractor knows about.
+#:
+#: Named the way the pack names them, not the way a schema does. The operator
+#: is comparing a screen against printed text, and a pack says "MFG", never
+#: "Manufacturing date" — so the longer form made them translate on every
+#: field. It also forced a two-line caption on the confirmation card, which
+#: pushed the value into the middle of the card and left "MRP" with a blank
+#: line under it.
+#:
+#: The printed label uses the same words (BATCH, MFG, EXP, LOT, MRP), so screen
+#: and output now agree as well.
 _CURATED_LABELS = {
-    "batchNumber": "Batch number",
-    "manufacturingDate": "Manufacturing date",
-    "expiryDate": "Expiry date",
-    "lotCode": "Lot code",
+    "batchNumber": "Batch",
+    "manufacturingDate": "MFG",
+    "expiryDate": "EXP",
+    "lotCode": "Lot",
     "mrp": "MRP",
 }
 

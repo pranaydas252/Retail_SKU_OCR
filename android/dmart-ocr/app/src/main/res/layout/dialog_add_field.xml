@@ -39,47 +39,33 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/nameLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        style="@style/Widget.DmartOcr.TextInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/add_field_name_hint"
-        app:boxCornerRadiusBottomEnd="14dp"
-        app:boxCornerRadiusBottomStart="14dp"
-        app:boxCornerRadiusTopEnd="14dp"
-        app:boxCornerRadiusTopStart="14dp"
-        app:boxStrokeColor="@color/brand_cyan">
+        android:hint="@string/add_field_name_hint">
 
         <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.DmartOcr.TextInput.Edit"
             android:id="@+id/nameInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/google_sans"
-            android:importantForAutofill="no"
-            android:inputType="textCapSentences"
-            android:maxLines="1" />
+            android:inputType="textCapSentences" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/valueLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        style="@style/Widget.DmartOcr.TextInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="14dp"
-        android:hint="@string/add_field_value_hint"
-        app:boxCornerRadiusBottomEnd="14dp"
-        app:boxCornerRadiusBottomStart="14dp"
-        app:boxCornerRadiusTopEnd="14dp"
-        app:boxCornerRadiusTopStart="14dp"
-        app:boxStrokeColor="@color/brand_cyan">
+        android:hint="@string/add_field_value_hint">
 
         <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.DmartOcr.TextInput.Edit"
             android:id="@+id/valueInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/google_sans"
-            android:importantForAutofill="no"
-            android:inputType="textCapCharacters"
-            android:maxLines="1" />
+            android:inputType="textCapCharacters" />
     </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

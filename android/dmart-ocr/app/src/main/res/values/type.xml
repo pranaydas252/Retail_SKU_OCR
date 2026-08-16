@@ -125,13 +125,56 @@
         <item name="android:textColor">@color/brand_cyan</item>
     </style>
 
+    <!--
+        Icon and label optically centred.
+
+        Two defaults fight a fixed-height button. `includeFontPadding` adds the
+        font's full ascent and descent above and below the glyphs, so the text
+        box is taller than the letters and its centre sits below theirs, while
+        the icon centres on the true content box — the icon reads high and the
+        text low. MaterialButton's 6dp vertical insets then shrink the drawable
+        without moving the content, which compounds it.
+
+        Zeroing both is what makes the pair line up. The buttons here all
+        declare an explicit height, so the insets are giving up nothing.
+    -->
     <style name="Widget.DmartOcr.Button" parent="Widget.Material3.Button">
         <item name="fontFamily">@font/google_sans</item>
         <item name="android:fontFamily">@font/google_sans</item>
         <item name="android:textSize">16sp</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:letterSpacing">0</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconGravity">textStart</item>
         <item name="cornerRadius">16dp</item>
+    </style>
+
+    <!--
+        Text fields, dense.
+
+        The default OutlinedBox is 56dp tall and built for a form the user is
+        going to spend time in. Every field in this app is a value set once at
+        install, or a short correction to something already read off a pack, so
+        the height was only pushing the rest of the dialog down.
+    -->
+    <style name="Widget.DmartOcr.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox.Dense">
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+        <item name="boxStrokeColor">@color/brand_cyan</item>
+        <item name="hintTextColor">@color/brand_cyan</item>
+    </style>
+
+    <style name="Widget.DmartOcr.TextInput.Edit" parent="Widget.Material3.TextInputEditText.OutlinedBox.Dense">
+        <item name="fontFamily">@font/google_sans</item>
+        <item name="android:fontFamily">@font/google_sans</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:importantForAutofill">no</item>
+        <item name="android:maxLines">1</item>
     </style>
 
 </resources>

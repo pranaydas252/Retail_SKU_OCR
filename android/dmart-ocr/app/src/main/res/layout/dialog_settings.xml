@@ -22,25 +22,18 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/serverLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        style="@style/Widget.DmartOcr.TextInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/settings_server_hint"
-        app:boxCornerRadiusBottomEnd="14dp"
-        app:boxCornerRadiusBottomStart="14dp"
-        app:boxCornerRadiusTopEnd="14dp"
-        app:boxCornerRadiusTopStart="14dp"
-        app:boxStrokeColor="@color/brand_cyan"
         app:hintTextColor="@color/text_secondary">
 
         <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.DmartOcr.TextInput.Edit"
             android:id="@+id/serverInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="@font/google_sans"
-            android:importantForAutofill="no"
             android:inputType="textUri"
-            android:maxLines="1"
             android:textColor="@color/text_primary" />
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -54,28 +47,21 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/printerLayout"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        style="@style/Widget.DmartOcr.TextInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp"
         android:hint="@string/settings_printer_hint"
-        app:boxCornerRadiusBottomEnd="14dp"
-        app:boxCornerRadiusBottomStart="14dp"
-        app:boxCornerRadiusTopEnd="14dp"
-        app:boxCornerRadiusTopStart="14dp"
-        app:boxStrokeColor="@color/brand_cyan"
         app:hintTextColor="@color/text_secondary">
 
         <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.DmartOcr.TextInput.Edit"
             android:id="@+id/printerInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:digits="0123456789ABCDEFabcdef:"
-            android:fontFamily="@font/google_sans"
-            android:importantForAutofill="no"
             android:inputType="textCapCharacters"
             android:maxLength="17"
-            android:maxLines="1"
             android:textColor="@color/text_primary" />
     </com.google.android.material.textfield.TextInputLayout>
 
@@ -92,7 +78,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="18dp"
-        android:fontFamily="@font/google_sans"
+        android:visibility="gone"
         android:text="@string/settings_sample_mode"
         android:textAppearance="@style/TextAppearance.DmartOcr.Title" />
 
@@ -100,6 +86,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
+        android:visibility="gone"
         android:text="@string/settings_sample_mode_help"
         android:textAppearance="@style/TextAppearance.DmartOcr.Body"
         android:textSize="12sp" />
@@ -110,6 +97,7 @@
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="16dp"
+        android:visibility="gone"
         android:text="@string/settings_test_print"
         android:textColor="@color/brand_cyan"
         app:cornerRadius="14dp"

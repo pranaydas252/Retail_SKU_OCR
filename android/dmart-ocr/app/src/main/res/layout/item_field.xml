@@ -1,29 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    One editable field on the confirmation screen, sized for a half-width grid
-    cell.
+    One editable field on the confirmation screen, sized for a half-width cell.
 
-    Three deliberate choices, each fixing a real defect:
+    Three single-line rows: caption, value, note. That is the whole design, and
+    it is what fixes the two problems the previous version had at once.
 
-    1. Confidence is a DOT, not a left rail. A rail has to be a child view with
-       match_parent height, and GridLayout stretches every cell to the tallest
-       card in its row — so the rail ran past the bottom of its own card. A dot
-       cannot bleed.
+    The caption used to be forced to two lines so that "Manufacturing date"
+    would fit, which meant "MRP" carried a blank line under it and the value sat
+    marooned in the middle of the card. It also made the confidence dot
+    impossible to align — centred vertically it fell between the caption's two
+    lines, and pinned to the top it needed a magic margin that only looked right
+    for one of the labels.
 
-    2. The label wraps to two lines and is never ellipsized. "Manufacturing
-       date" does not fit a half-width cell on one line, and truncating it to
-       "Manufactu..." hides the one thing the operator needs: which field they
-       are checking.
+    The fix was upstream, in what the server calls these fields. They are now
+    named the way the pack names them — BATCH, MFG, EXP, LOT, MRP — so every
+    caption is one short line, the dot centres against it with no arithmetic,
+    and the value follows immediately. It also means the operator reads the same
+    word on the screen, on the pack, and on the printed label.
 
-    3. The reason line always occupies its line, and is merely INVISIBLE when
-       there is nothing to say. Collapsing it made cards different heights
-       depending on how well each field happened to be read, which turned a
-       grid of five into a ragged staircase.
-
-    Every card is therefore the same height by construction rather than by a
-    hard-coded dp: a fixed two-line label, a single-line value, and a
-    single-line note. Nothing here sizes to its own content, so nothing can
-    make one card taller than its neighbour.
+    The note keeps its line whether or not it has something to say. Collapsing
+    it made card height a function of how well each field happened to be read,
+    which turned a grid of four into a staircase. INVISIBLE holds the row; the
+    cards are then identical by construction rather than by a hard-coded dp.
 -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -42,46 +40,46 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="10dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingHorizontal="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
+        <!-- gravity=center_vertical is all the dot alignment needs, now that
+             the caption beside it is exactly one line. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:baselineAligned="false"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <View
                 android:id="@+id/bandDot"
                 android:layout_width="7dp"
                 android:layout_height="7dp"
-                android:layout_marginTop="3dp"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="7dp"
                 android:background="@drawable/dot_high" />
 
-            <!-- lines, not maxLines: "Manufacturing date" needs two lines in a
-                 half-width cell and "MRP" needs one, and a card that sizes to
-                 its own label is a card that does not match its neighbour. -->
             <TextView
                 android:id="@+id/fieldLabel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:lines="2"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
                 android:textAppearance="@style/TextAppearance.DmartOcr.FieldKey"
-                tools:text="Manufacturing date" />
+                tools:text="BATCH" />
 
             <!-- Only shown for rows the operator added themselves. -->
             <ImageView
                 android:id="@+id/removeButton"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:layout_marginTop="-4dp"
-                android:layout_marginEnd="-4dp"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="-5dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/result_remove_field"
-                android:padding="7dp"
+                android:padding="6dp"
                 android:src="@drawable/ic_close"
                 android:visibility="gone"
                 app:tint="@color/text_tertiary"
@@ -89,44 +87,44 @@
         </LinearLayout>
 
         <!--
-            Single line, and no textMultiLine.
+            The value is the one thing on this card the operator is actually
+            reading, so it is the only element allowed to be large.
 
-            Every value this screen carries is short by nature - a date, a
-            price, a batch code - so wrapping was only ever reachable by a bad
-            read, and letting a bad read stretch its card is the wrong response
-            to it. A long value scrolls horizontally while being edited instead.
+            Single line, and no textMultiLine: every value here is short by
+            nature — a date, a price, a batch code — so wrapping was only ever
+            reachable by a bad read, and letting a bad read stretch its card is
+            the wrong response to it. A long one scrolls while being edited.
         -->
         <EditText
             android:id="@+id/fieldValue"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:background="@null"
             android:hint="@string/result_not_found"
             android:importantForAutofill="no"
+            android:includeFontPadding="false"
             android:inputType="textCapCharacters"
             android:maxLines="1"
-            android:minHeight="26dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="0dp"
+            android:minHeight="0dp"
+            android:paddingVertical="0dp"
             android:textAppearance="@style/TextAppearance.DmartOcr.Value"
             android:textColorHint="@color/text_tertiary"
-            tools:text="2026-07" />
+            tools:text="GSB0134" />
 
         <!-- Says WHY a value is doubtful. A band with no reason only tells the
-             operator to worry; this tells them what to look at.
-
-             Always one line, INVISIBLE rather than GONE when there is nothing
-             to say, so a well-read field does not shrink its card relative to
-             a doubtful one. -->
+             operator to worry; this tells them what to look at. -->
         <TextView
             android:id="@+id/fieldNote"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
-            android:lines="1"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
             android:textAppearance="@style/TextAppearance.DmartOcr.FieldNote"
             android:visibility="invisible"
-            tools:text="Check this"
+            tools:text="Check against pack"
             tools:visibility="visible" />
 
     </LinearLayout>

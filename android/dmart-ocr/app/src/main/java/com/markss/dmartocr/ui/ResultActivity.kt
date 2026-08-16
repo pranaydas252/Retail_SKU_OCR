@@ -285,39 +285,21 @@ class ResultActivity : AppCompatActivity() {
     /**
      * One line saying whether the operator can skim or must look carefully.
      *
-     * "Needs review" and "not found" are counted apart, because they ask for
-     * different things. A field that carries a doubtful value needs checking
-     * against the pack. A field that was never read has nothing to check — the
-     * operator either types it or, on a pack that does not print it at all,
-     * leaves it alone. Counting the two together told an operator holding a
-     * pouch with no lot code that three values needed review when one did.
+     * It counts only values that are on screen and doubtful. A field the
+     * server did not find is not mentioned: it has no card, there is nothing
+     * to review, and naming it only asks the operator to account for something
+     * the pack may simply not print. "Add field" is there for the case where
+     * it does.
      */
     private fun updateSummary() {
         val needingReview = scan.fields.count { (name, field) ->
             rows.containsKey(name) && field.band != ExtractedField.BAND_HIGH
         }
-        // Counted from what the server returned, not from what is on screen:
-        // these fields have no card, and the summary line is now the only
-        // place they are reported at all.
-        //
-        // Excluding rows the operator has since added is the point — once they
-        // have supplied the expiry themselves it is no longer missing, and a
-        // banner still asking for it would be the same nagging empty card in
-        // another form.
-        val notFound = scan.fields.count { (name, field) ->
-            !field.wasFound && !rows.containsKey(name)
-        }
 
         val summary: String? = when {
-            needingReview > 0 && notFound > 0 ->
-                getString(R.string.result_review_and_missing, needingReview, notFound)
-
             needingReview == 1 -> getString(R.string.result_review_count, 1)
             needingReview > 1 ->
                 getString(R.string.result_review_count_plural, needingReview)
-
-            notFound == 1 -> getString(R.string.result_missing_count, 1)
-            notFound > 1 -> getString(R.string.result_missing_count_plural, notFound)
 
             else -> null
         }

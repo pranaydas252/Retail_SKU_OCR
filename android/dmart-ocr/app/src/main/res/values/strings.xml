@@ -14,10 +14,10 @@
     <!-- Settings -->
     <string name="settings_title">Configuration</string>
     <string name="settings_server_hint">Server address</string>
-    <string name="settings_server_help">Host and port of the OCR server, for example 192.168.1.50:8000</string>
+    <string name="settings_server_help">Host and port of the OCR server</string>
     <string name="settings_server_error">Enter a valid address, e.g. 192.168.1.50:8000</string>
     <string name="settings_printer_hint">Printer Bluetooth MAC</string>
-    <string name="settings_printer_help">ZQ320 address in the form AC:3F:A4:11:22:33. Leave empty until a printer is paired.</string>
+    <string name="settings_printer_help">Printer address in the form AC:3F:A4:11:22:33.</string>
     <string name="settings_printer_error">Enter a MAC like AC:3F:A4:11:22:33</string>
     <string name="settings_test_print">Test print</string>
     <string name="settings_test_print_running">Sending test label…</string>
@@ -83,17 +83,12 @@
     <string name="result_saving">Saving…</string>
     <string name="result_derived">Calculated from the manufacturing date and the shelf life printed on the pack. Check it.</string>
     <!--
-        "Needs review" and "not found" are different statements and are counted
-        separately. A field that was never read has nothing to review - saying
-        otherwise asks the operator to check a value that does not exist, and
-        on packs that genuinely do not print a lot code it flags an absence as
-        a fault.
+        Only doubtful values on screen are counted. A field the server did not
+        find has no card and nothing to review, and naming it asks the operator
+        to account for something the pack may simply not print.
     -->
     <string name="result_review_count">%1$d value needs review</string>
     <string name="result_review_count_plural">%1$d values need review</string>
-    <string name="result_missing_count">%1$d field not found</string>
-    <string name="result_missing_count_plural">%1$d fields not found</string>
-    <string name="result_review_and_missing">%1$d to review · %2$d not found</string>
     <string name="result_all_clear">All values read clearly</string>
     <string name="result_nothing_extracted">No fields could be read from this
         capture. Retake it, or add the values yourself.</string>
