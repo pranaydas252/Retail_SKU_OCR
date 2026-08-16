@@ -173,3 +173,6 @@ $RECYCLE.BIN/
 *.tmp
 *.swp
 *~
+
+# Measurement output — regenerated per run, not source
+ensemble_results.json
