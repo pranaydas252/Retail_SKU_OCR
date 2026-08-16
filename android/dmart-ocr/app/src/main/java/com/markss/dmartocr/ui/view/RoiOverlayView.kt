@@ -83,16 +83,21 @@ class RoiOverlayView @JvmOverloads constructor(
     fun roiRect(): RectF = RectF(roiRect)
 
     /**
-     * Tints the corner brackets when the framing looks good.
+     * Colours the corner brackets by how good the framing is.
      *
-     * Feedback only — the capture button stays live either way. The signal is
-     * "this frame looks readable", not permission to proceed, and an operator
-     * who can see the label must always be able to take the picture.
+     * Three states rather than two, because a binary indicator cannot say
+     * whether the operator is getting closer — it only flips at the end. Amber
+     * is the useful one: it means "nearly", which is what tells someone to keep
+     * doing what they are doing.
      */
-    fun setReady(ready: Boolean) {
+    fun setBand(band: com.markss.dmartocr.ocr.ReadinessTracker.Band) {
         val next = ContextCompat.getColor(
             context,
-            if (ready) R.color.roi_ready else R.color.roi_stroke,
+            when (band) {
+                com.markss.dmartocr.ocr.ReadinessTracker.Band.GOOD -> R.color.roi_good
+                com.markss.dmartocr.ocr.ReadinessTracker.Band.FAIR -> R.color.roi_fair
+                com.markss.dmartocr.ocr.ReadinessTracker.Band.POOR -> R.color.roi_poor
+            },
         )
         if (cornerPaint.color != next) {
             cornerPaint.color = next

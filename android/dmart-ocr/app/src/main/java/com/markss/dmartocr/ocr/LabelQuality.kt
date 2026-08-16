@@ -40,6 +40,41 @@ data class LabelQuality(
     val isReady: Boolean
         get() = hint() == null
 
+    /**
+     * How good this frame is, 0..100.
+     *
+     * A single number rather than a pass/fail, because pass/fail gives the
+     * operator nothing to aim at — it flips without saying whether they are
+     * getting warmer. Each term is the same evidence [hint] already uses,
+     * scaled so it degrades smoothly instead of stepping.
+     *
+     * The weights say what actually matters. A field name being visible is
+     * worth more than anything else, because it is what distinguishes the
+     * declaration panel from the rest of the pack, and no amount of sharp
+     * well-aligned ingredient text is a substitute for it.
+     */
+    val score: Int
+        get() {
+            if (linesInRoi == 0) return 0
+
+            val coverage = (linesInRoi.toFloat() / TARGET_LINES).coerceIn(0f, 1f)
+            val panel = if (hasFieldLabel) 1f else 0f
+            val alignment = (1f - kotlin.math.abs(skewDegrees) / MAX_SKEW).coerceIn(0f, 1f)
+
+            // Confidence of exactly zero means the build does not report it, so
+            // it is treated as neutral rather than as a bad read - scoring it
+            // as zero would peg every frame on such a device to a low score and
+            // the gate would never open.
+            val sharpness = if (confidence <= 0f) 0.75f else {
+                ((confidence - POOR_CONFIDENCE) / (GOOD_CONFIDENCE - POOR_CONFIDENCE))
+                    .coerceIn(0f, 1f)
+            }
+
+            val weighted =
+                0.20f * coverage + 0.35f * panel + 0.30f * sharpness + 0.15f * alignment
+            return (weighted * 100).toInt()
+        }
+
     /** Operator-facing reason the frame is not ready yet, or null when it is. */
     fun hint(): Int? = when {
         linesInRoi == 0 -> R_NO_TEXT
@@ -81,6 +116,16 @@ data class LabelQuality(
          * 0.31-0.46, so the boundary sits in the empty space between.
          */
         const val MIN_CONFIDENCE = 0.55f
+
+        /** Lines that count as a fully framed declaration panel. */
+        const val TARGET_LINES = 6
+
+        /**
+         * Ends of the confidence range, from TC22 logs: frames a person would
+         * call unreadable clustered at 0.31-0.46, readable ones at 0.60-0.73.
+         */
+        const val POOR_CONFIDENCE = 0.40f
+        const val GOOD_CONFIDENCE = 0.70f
 
         // Resource ids are passed through rather than resolved here, so this
         // class stays free of Android context and is unit-testable.

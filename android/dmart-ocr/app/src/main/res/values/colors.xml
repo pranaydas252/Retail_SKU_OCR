@@ -43,8 +43,11 @@
     <!-- Camera overlay -->
     <color name="scrim">#A6000000</color>
     <color name="roi_stroke">#00A7E8</color>
-    <!-- Corner brackets when ML Kit reports the label is framed and readable. -->
-    <color name="roi_ready">#22C55E</color>
+    <!-- Framing quality bands. Amber is deliberately distinct from both, since
+         it carries the only actionable message: nearly there, keep going. -->
+    <color name="roi_good">#22C55E</color>
+    <color name="roi_fair">#F59E0B</color>
+    <color name="roi_poor">#00A7E8</color>
 
     <color name="ripple_on_brand">#33FFFFFF</color>
 

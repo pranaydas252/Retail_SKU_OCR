@@ -38,6 +38,7 @@ import com.markss.dmartocr.databinding.ActivityScanBinding
 import com.markss.dmartocr.device.DeviceId
 import com.markss.dmartocr.ocr.LabelAnalyzer
 import com.markss.dmartocr.ocr.LabelQuality
+import com.markss.dmartocr.ocr.ReadinessTracker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +77,9 @@ class ScanActivity : AppCompatActivity() {
     @Volatile
     private var quality: LabelQuality? = null
 
+    /** Smooths the per-frame readings into something stable enough to act on. */
+    private val readiness = ReadinessTracker()
+
     /**
      * ROI window as view fractions, cached for the analyzer thread.
      *
@@ -109,6 +113,12 @@ class ScanActivity : AppCompatActivity() {
             binding.instruction.setText(R.string.sample_mode_banner)
             binding.instructionHint.text =
                 getString(R.string.sample_mode_hint, SampleStore.count(this))
+        } else {
+            // Held shut until the framing earns it, so the backend only ever
+            // receives frames worth processing. Sample collection is exempt:
+            // its whole purpose is to gather difficult images, including the
+            // ones the gate would reject.
+            setShutterEnabled(false)
         }
 
         positionInstructionAboveRoi()
@@ -227,21 +237,22 @@ class ScanActivity : AppCompatActivity() {
     }
 
     /**
-     * Reflects the live readiness reading in the instruction line.
+     * Reflects the live readiness reading in the instruction line and shutter.
      *
-     * Advisory only — the capture button is never disabled. A gate that
-     * silently refuses to fire is indistinguishable from a broken app to the
-     * operator, and on a label the recogniser happens to misread it would make
-     * the scan impossible rather than merely harder. So this guides framing and
-     * leaves the decision with the person holding the device.
+     * The reading is smoothed before it is shown. Raw per-frame values change
+     * about five times a second, which on the device meant the advice changed
+     * faster than a person could act on it and "ready to capture" vanished
+     * before the shutter could be pressed.
      */
     private fun onQuality(reading: LabelQuality) {
         quality = reading
         if (capturing || AppPreferences.sampleMode) return
 
-        val hint = reading.hint()
+        val now = android.os.SystemClock.elapsedRealtime()
+        val band = readiness.update(reading, now)
+
         binding.instructionHint.setText(
-            when (hint) {
+            when (reading.hint()) {
                 LabelQuality.R_NO_TEXT -> R.string.scan_hint_no_text
                 LabelQuality.R_MOVE_CLOSER -> R.string.scan_hint_move_closer
                 LabelQuality.R_STRAIGHTEN -> R.string.scan_hint_straighten
@@ -250,7 +261,20 @@ class ScanActivity : AppCompatActivity() {
                 else -> R.string.scan_hint_ready
             }
         )
-        binding.roiOverlay.setReady(hint == null)
+        binding.roiOverlay.setBand(band)
+        setShutterEnabled(band == ReadinessTracker.Band.GOOD)
+
+        // Fire by itself once the frame has held up for a moment. The instant a
+        // frame is worth keeping is decided by the frame, not by how quickly
+        // someone can reach the button — which is what made a good reading
+        // unusable before.
+        if (readiness.shouldAutoCapture(now)) capture()
+    }
+
+    private fun setShutterEnabled(enabled: Boolean) {
+        if (binding.captureButton.isEnabled == enabled) return
+        binding.captureButton.isEnabled = enabled
+        binding.captureButton.alpha = if (enabled) 1f else 0.4f
     }
 
     private fun capture() {
@@ -389,6 +413,11 @@ class ScanActivity : AppCompatActivity() {
         binding.capturedPreview.visibility = View.GONE
         binding.capturedPreview.setImageDrawable(null)
         binding.roiOverlay.visibility = View.VISIBLE
+        // Start the reading again from nothing. Carrying the old score over
+        // would re-arm the shutter — and with auto-capture, immediately fire it
+        // again on a frame nobody has looked at since the failure.
+        readiness.reset()
+        if (!AppPreferences.sampleMode) setShutterEnabled(false)
         analyzer?.enabled = true
     }
 
