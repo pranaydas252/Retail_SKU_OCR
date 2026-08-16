@@ -223,3 +223,84 @@ class TestRealLabelLayouts:
         assert fields["expiryDate"].normalized.value == "2026-09"
         assert fields["mrp"].normalized.value == "20.00"
         assert "lotCode" not in fields, "this pack has no separate lot code"
+
+
+class TestBarePackDates:
+    """Packs that stamp dates with no field names, and the guards around them.
+
+    Every token string here came off a real TC22 capture.
+    """
+
+    def test_a_single_printed_date_is_still_recovered(self):
+        # An insecticide jar stamped "MN2605121 05/26" and nothing else. The
+        # pairing rule wants two dates and this pack prints one, so a value
+        # read at 0.94 confidence was being thrown away for being alone.
+        fields = extract_fields([
+            token("MN2605121 05/26", 274, 248, 300, 39),
+            token("20:17", 277, 288, 120, 44),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-05"
+        # A guess about WHICH field, never about the value, so it must not be
+        # presented as certain.
+        assert fields["manufacturingDate"].normalized.is_ambiguous
+        assert fields["manufacturingDate"].strategy == "inferred"
+
+    def test_a_printed_time_is_not_read_as_a_date(self):
+        # "20:17" is the stamp's clock. A colon is not a date separator, and
+        # hour 20 would otherwise parse as a month.
+        fields = extract_fields([token("20:17", 277, 288, 120, 44)])
+        assert "manufacturingDate" not in fields
+        assert "expiryDate" not in fields
+
+    def test_a_future_single_date_is_read_as_expiry(self):
+        fields = extract_fields([token("11/2035", 274, 248)])
+        assert fields["expiryDate"].normalized.value == "2035-11"
+        assert "manufacturingDate" not in fields
+
+    def test_a_date_no_product_could_carry_is_rejected(self):
+        # "2.00" is a valid calendar date to the parser - February 2000 - and
+        # is not a date on anything in a shop.
+        fields = extract_fields([token("2.00", 300, 100)])
+        assert "manufacturingDate" not in fields
+        assert "expiryDate" not in fields
+
+
+class TestBareDecimalNeedsCorroboration:
+    """A number with two decimal places is the weakest evidence here."""
+
+    def test_bare_decimal_is_not_a_price_on_a_pack_that_names_no_price(self):
+        # The false accept this gate exists for: "92.10" sits beside
+        # "USE BEFORE" on a pack carrying BATCH NO., USE BEFORE, STORAGE
+        # CONDITION and NET VOL. - and no price of any kind. It is a mangled
+        # date, and section 24 rates a false accept as the worst outcome here.
+        fields = extract_fields([
+            token("BATCH NO.", 381, 0),
+            token("USE BEFORE", 381, 49),
+            token("92.10", 616, 54, 90, 30, 0.67),
+            token("NET VOL.", 233, 264),
+        ])
+        assert "mrp" not in fields
+
+    def test_bare_decimal_is_a_price_when_the_pack_mentions_money(self):
+        # The same shape on a pack that prints "M.R.P.RS:". PP-OCRv5 returned
+        # the value as "F3.2.00" - the currency marker was mangled, so only
+        # the bare-decimal branch can reach it.
+        fields = extract_fields([
+            token("M.R.P.RS:", 164, 293, 190, 32),
+            token("F3.2.00", 362, 272, 160, 46, 0.75),
+        ])
+        assert fields["mrp"].normalized.value == "2.00"
+
+    def test_a_mangled_word_is_not_a_mention_of_money(self):
+        # "RSIY" contains RS. The stripping regex matches it, which is fine
+        # for stripping and wrong for corroboration.
+        fields = extract_fields([
+            token("RSIY", 219, 28),
+            token("92.10", 616, 54, 90, 30, 0.67),
+        ])
+        assert "mrp" not in fields
+
+    def test_a_marked_price_needs_no_corroboration(self):
+        fields = extract_fields([token("245.00/-", 300, 100)])
+        assert fields["mrp"].normalized.value == "245.00"

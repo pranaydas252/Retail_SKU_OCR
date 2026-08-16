@@ -304,6 +304,16 @@ class ResultActivity : AppCompatActivity() {
             else -> null
         }
 
+        // Nothing was read at all, so there is nothing to be clear about. The
+        // banner used to say "All values read clearly" above a card explaining
+        // that no fields could be read, because zero doubtful values and zero
+        // values look identical to a count.
+        if (rows.isEmpty()) {
+            binding.summaryBanner.visibility = View.GONE
+            return
+        }
+        binding.summaryBanner.visibility = View.VISIBLE
+
         if (summary == null) {
             binding.summaryBanner.setBackgroundResource(R.drawable.bg_chip_high)
             binding.summaryIcon.setImageResource(R.drawable.ic_check)

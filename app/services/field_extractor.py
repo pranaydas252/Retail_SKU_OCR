@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
@@ -103,6 +104,36 @@ def load_config(config_path: str | None = None) -> dict:
 _DATE_HINT = re.compile(
     r"(\d{1,2}\s*[/\-.]\s*\d{2,4}|\d{4,6}|[A-Z]{3,9}\s*\d{2,4})", re.IGNORECASE
 )
+
+#: How far a printed pack date can plausibly sit from today.
+#:
+#: The parser will happily turn "2.00" into 2000-02, because it is a valid
+#: calendar date. On a jar in a D-Mart aisle it is not a date at all — it is
+#: the "2.00" of "RS.2.00", and treating it as one cost the MRP on a real
+#: capture: the price was discarded for overlapping a date that never existed.
+#:
+#: The window is deliberately generous. Nothing on sale was manufactured a
+#: decade ago, and almost nothing carries an expiry fifteen years out, so a
+#: date outside it is a misread rather than a fact about the product.
+#:
+#: This lives in the extractor and NOT in the normalizer, which is the whole
+#: point. The normalizer also runs on /confirm, where the operator is the final
+#: authority (CLAUDE.md section 4) — refusing an odd date they typed
+#: deliberately would be the wrong end of the pipeline to be strict at.
+_MAX_YEARS_PAST = 10
+_MAX_YEARS_FUTURE = 15
+
+
+def _plausible_pack_date(value: str | None) -> bool:
+    """Is this normalized date one a product on a shelf could carry?"""
+    if not value:
+        return False
+    try:
+        year = int(value[:4])
+    except ValueError:
+        return False
+    this_year = date.today().year
+    return this_year - _MAX_YEARS_PAST <= year <= this_year + _MAX_YEARS_FUTURE
 _NUMBER_HINT = re.compile(r"\d")
 _CODE_HINT = re.compile(r"[A-Z0-9]{3,}", re.IGNORECASE)
 
@@ -351,7 +382,10 @@ def extract_fields(tokens: list[OcrToken]) -> dict[str, FieldCandidate]:
                 normalized = normalizer.normalize(
                     remainder, spec.value_type, spec.date_precision
                 )
-                if normalized.ok:
+                if normalized.ok and (
+                    spec.value_type != "date"
+                    or _plausible_pack_date(normalized.value)
+                ):
                     candidates.append(
                         FieldCandidate(
                             field=spec.name,
@@ -442,6 +476,15 @@ _UNIT_PRICE_LABEL = re.compile(r"\bUSP\b", re.IGNORECASE)
 #: Currency markers, which are the only letters allowed to sit inside a price.
 _CURRENCY_MARKER = re.compile(r"RS|INR|MRP|M\.?R\.?P|₹|/-|/=", re.IGNORECASE)
 
+#: The same markers, but as evidence rather than as something to strip.
+#:
+#: Requiring a word boundary is the whole difference. Stripping "RS" out of a
+#: value is harmless when it over-matches; accepting a bare decimal as an MRP
+#: because the pack contains the letters R and S is not.
+_MONEY_MENTION = re.compile(
+    r"\bRS\b|\bINR\b|\bMRP\b|\bM\.?R\.?P\.?|₹|\d\s*/-|\d\s*/=", re.IGNORECASE
+)
+
 #: A bracketed aside, in either ASCII or fullwidth brackets. Beside a price it
 #: is the tax disclaimer or the per-unit rate, never the amount itself.
 _BRACKETED = re.compile(r"[(（][^)）]*[)）]?")
@@ -505,8 +548,28 @@ def _infer_unlabelled(
     if wanted.issubset(results.keys()):
         return
 
-    dates: list[tuple[str, OcrToken]] = []
+    dates: list[tuple[str, str, OcrToken]] = []
     prices: list[tuple[str, OcrToken]] = []
+
+    # Does this pack talk about money at all?
+    #
+    # A bare decimal is the weakest evidence in the extractor — it is any
+    # number with two decimal places — and it exists only for stamps that print
+    # no currency marker. On a pack that names no price anywhere it is far more
+    # likely to be something else: "92.10" beside "USE BEFORE" on a real
+    # capture is a mangled date, and the pack carries BATCH NO., USE BEFORE,
+    # STORAGE CONDITION and NET VOL. but no price of any kind. Reading it as an
+    # MRP is a false accept, which section 24 rates as the most serious failure
+    # class this project has.
+    #
+    # So a bare decimal needs corroboration: some token, anywhere on the label,
+    # that mentions money. A marked price ("RS.2.00", "245/-") says what it is
+    # and needs none.
+    # Not _CURRENCY_MARKER: that one is built for STRIPPING a marker out of a
+    # value and matches "RS" anywhere, which "RSIY" — a mangled token on the
+    # very pack this gate exists for — satisfies. Corroboration has to be
+    # stricter than removal, so the marker must stand as a word.
+    mentions_money = any(_MONEY_MENTION.search(token.text) for token in tokens)
 
     for token in tokens:
         text = _split_run_together_dates(token.text)
@@ -515,9 +578,19 @@ def _infer_unlabelled(
 
         without_unit = _PER_UNIT.sub(" ", text)
 
+        # Dates are normalized and checked for plausibility HERE, not later,
+        # because the spans they occupy are what suppress a bare decimal from
+        # being read as a price. A span that turns out not to be a date must
+        # not suppress anything: "RS.2.00" came back as "F3.2.00", whose
+        # "2.00" parses as the year 2000, and the real MRP was discarded for
+        # colliding with a date that does not exist.
         date_spans = []
         for match in _DATE_TOKEN.finditer(without_unit):
-            dates.append((match.group(1), token))
+            raw = match.group(1)
+            normalized = normalizer.normalize_date(raw, "day")
+            if not (normalized.ok and _plausible_pack_date(normalized.value)):
+                continue
+            dates.append((normalized.value, raw, token))
             date_spans.append(match.span())
 
         for match in _PRICE_TOKEN.finditer(without_unit):
@@ -536,6 +609,8 @@ def _infer_unlabelled(
             # "M.R.P. Rs. 20.00" must not be discarded because "20.00" also
             # looks like a day-month pair.
             if match.group(3):
+                if not mentions_money:
+                    continue
                 start, end = match.span()
                 if any(start < d_end and d_start < end for d_start, d_end in date_spans):
                     continue
@@ -552,15 +627,11 @@ def _infer_unlabelled(
         if normalized.ok:
             results["mrp"] = _inferred("mrp", raw, normalized, token)
 
-    parsed: list[tuple[str, str, OcrToken]] = []
-    for raw, token in dates:
-        normalized = normalizer.normalize_date(raw, "day")
-        if normalized.ok and normalized.value:
-            parsed.append((normalized.value, raw, token))
-
+    # Already normalized and plausibility-checked above, where the spans were
+    # needed for the price exclusion.
     # Distinct dates only: the same stamp read twice is not two dates.
     seen: set[str] = set()
-    unique = [p for p in parsed if not (p[0] in seen or seen.add(p[0]))]
+    unique = [p for p in dates if not (p[0] in seen or seen.add(p[0]))]
     unique.sort(key=lambda p: p[0])
 
     if len(unique) >= 2:
@@ -578,6 +649,32 @@ def _infer_unlabelled(
                 normalizer.NormalizedValue(latest[0], is_ambiguous=True,
                                            notes=["inferred: later of two printed dates"]),
                 latest[2],
+            )
+        return
+
+    if len(unique) == 1:
+        # One date, and nothing on the pack to say which field it is.
+        #
+        # A jar stamped "MN2605121 05/26" was returning no date at all, because
+        # the pairing rule above needs two. The value had been recognised at
+        # 0.94 confidence and was then thrown away for being alone.
+        #
+        # Whether it is manufacture or expiry is decided by the calendar, which
+        # is the only evidence present: goods on a shelf were made in the past
+        # and expire in the future. It is a guess about the FIELD, never about
+        # the value — the date itself was read, not invented — and it is marked
+        # ambiguous so it lands in operator review rather than being trusted.
+        only = unique[0]
+        field = "manufacturingDate" if only[0] <= date.today().isoformat() else "expiryDate"
+        if field not in results:
+            results[field] = _inferred(
+                field, only[1],
+                normalizer.NormalizedValue(
+                    only[0], is_ambiguous=True,
+                    notes=["inferred: the only printed date, assigned by whether "
+                           "it is in the past or the future"],
+                ),
+                only[2],
             )
 
 
@@ -722,6 +819,8 @@ def _best_neighbour(
             candidate.text, spec.value_type, spec.date_precision
         )
         if not normalized.ok:
+            continue
+        if spec.value_type == "date" and not _plausible_pack_date(normalized.value):
             continue
 
         scored.append((_spatial_score(label, candidate, strategy), candidate, normalized))
