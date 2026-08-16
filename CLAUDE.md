@@ -222,8 +222,6 @@ The app should provide a simple scan screen:
 
 ### Client-side image quality checks
 
-Keep these lightweight. Do not build an AI vision pipeline on the TC22.
-
 Useful checks:
 
 - Image exists and is readable.
@@ -233,6 +231,65 @@ Useful checks:
 - Image is not obviously empty/invalid.
 
 Do not over-engineer this for the first POC.
+
+#### On-device text detection — ML Kit
+
+**Pivot, 2026-08-16.** This section previously said "do not build an AI vision
+pipeline on the TC22". That is now qualified: **ML Kit text recognition runs on
+the preview stream to judge capture quality, skew and framing.**
+
+Dependency, and the reason for the exact artifact:
+
+```gradle
+implementation 'com.google.mlkit:text-recognition:16.0.1'
+```
+
+Bundled, **not** `com.google.android.gms:play-services-mlkit-text-recognition`.
+Zebra ships the TC22 in GMS and AOSP variants, and the play-services artifact
+does not work at all on an AOSP unit. Bundled costs about 4MB and has no such
+dependency. Latin only — the fields are alphanumeric.
+
+**What it is used for, and what it is not.** Measured on the 15 ROI captures,
+scored through the server's own extractor and ground truth:
+
+| Engine | Core | Codes | Per image |
+| --- | --- | --- | --- |
+| `PP-OCRv5_mobile_det` + `PP-OCRv5_mobile_rec` + rules (server) | 43% | 38% | 4.3s |
+| ML Kit + rules (on device) | 29% | 12% | **252ms** |
+
+So it is **not** a replacement for server OCR — its recognition ceiling is 50%
+against PP-OCRv5's 66%. It is used for the thing it is genuinely better at:
+250ms is fast enough to run continuously on the preview, which buys three
+things the server architecture structurally cannot:
+
+- **Capture gating.** Text present in the ROI, a field label visible, sane
+  skew — checked before the shutter fires. Every accuracy figure in this
+  project is measured on frames an operator already chose to keep, and nothing
+  used to check whether keeping them was a good idea.
+- **Deskew.** `Text.Line.getAngle()` gives the printed rotation, so the crop is
+  straightened on-device without OpenCV.
+- **A second opinion.** Its tokens are complementary — it read values PP-OCRv5
+  never recognised — and at 252ms it is nearly free to consult.
+
+The gate is **advisory**. It never disables the capture button. A gate that
+silently refuses to fire is indistinguishable from a broken app, and on a label
+the recogniser happens to misread it would make the scan impossible rather than
+merely harder.
+
+Primary extraction stays on the server, so the rule in section 3 still holds.
+
+#### Cropping and scaling — no third-party library
+
+Use the platform. `BitmapRegionDecoder` decodes only the region asked for
+without materializing the full bitmap, `BitmapFactory.Options.inSampleSize`
+downscales at decode time, and `Bitmap.createBitmap(src, x, y, w, h, matrix,
+true)` crops, rotates and scales in one pass.
+
+Do not add uCrop or CanHub Android-Image-Cropper — both are interactive crop
+UIs, and section 4 rules out manual cropping. Do not add OpenCV to the Android
+project for cropping; it is 40–70MB of native libraries for work the platform
+already does. Revisit only if true perspective correction on curved packs is
+needed, and measure before adding it.
 
 ### Image upload
 

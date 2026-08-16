@@ -83,6 +83,24 @@ class RoiOverlayView @JvmOverloads constructor(
     fun roiRect(): RectF = RectF(roiRect)
 
     /**
+     * Tints the corner brackets when the framing looks good.
+     *
+     * Feedback only — the capture button stays live either way. The signal is
+     * "this frame looks readable", not permission to proceed, and an operator
+     * who can see the label must always be able to take the picture.
+     */
+    fun setReady(ready: Boolean) {
+        val next = ContextCompat.getColor(
+            context,
+            if (ready) R.color.roi_ready else R.color.roi_stroke,
+        )
+        if (cornerPaint.color != next) {
+            cornerPaint.color = next
+            invalidate()
+        }
+    }
+
+    /**
      * ROI as fractions of the view: left, top, right, bottom in 0..1.
      *
      * These map directly onto the captured bitmap. Because preview and capture

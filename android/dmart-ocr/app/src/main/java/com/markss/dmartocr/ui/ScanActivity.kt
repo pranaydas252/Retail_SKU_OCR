@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -35,6 +36,8 @@ import com.markss.dmartocr.data.SampleStore
 import com.markss.dmartocr.data.ScanResponse
 import com.markss.dmartocr.databinding.ActivityScanBinding
 import com.markss.dmartocr.device.DeviceId
+import com.markss.dmartocr.ocr.LabelAnalyzer
+import com.markss.dmartocr.ocr.LabelQuality
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,6 +62,30 @@ class ScanActivity : AppCompatActivity() {
     private var camera: androidx.camera.core.Camera? = null
     private var torchOn = false
     private var capturing = false
+
+    private var analyzer: LabelAnalyzer? = null
+
+    /**
+     * Last readiness reading from the preview analyzer.
+     *
+     * Its skew is what the capture is deskewed by. Taking the angle from the
+     * live stream rather than re-running recognition on the still keeps the
+     * shutter responsive — the reading is at most a frame old, and a label does
+     * not rotate between the last preview frame and the shutter.
+     */
+    @Volatile
+    private var quality: LabelQuality? = null
+
+    /**
+     * ROI window as view fractions, cached for the analyzer thread.
+     *
+     * The analyzer runs on the camera executor and must not touch a View to
+     * read its geometry — the same race the capture path avoids by reading the
+     * ROI on the main thread first. The rect is fixed once laid out, so a
+     * single snapshot is enough.
+     */
+    @Volatile
+    private var roiFraction: RectF = RectF(0f, 0f, 1f, 1f)
 
     private val requestCamera = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -97,12 +124,14 @@ class ScanActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        analyzer?.close()
         cameraExecutor.shutdown()
     }
 
     /** Keeps the instruction text tied to the window it refers to. */
     private fun positionInstructionAboveRoi() {
         binding.roiOverlay.post {
+            roiFraction = binding.roiOverlay.roiFraction()
             val roi = binding.roiOverlay.roiRect()
             val params = binding.instructionGroup.layoutParams as ConstraintLayout.LayoutParams
             val gap = (24 * resources.displayMetrics.density).toInt()
@@ -152,9 +181,27 @@ class ScanActivity : AppCompatActivity() {
                 imageCapture!!.targetRotation,
             ).setScaleType(ViewPort.FIT).build()
 
+            // Readiness analysis shares the ViewPort with preview and capture,
+            // so the ROI fractions address the same physical region in all
+            // three. Without that the gate would judge a different area than
+            // the one the operator is aiming at.
+            val analysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setTargetRotation(imageCapture!!.targetRotation)
+                .build()
+                .also { useCase ->
+                    val quality = LabelAnalyzer(
+                        roiProvider = { roiFraction },
+                        onResult = { runOnUiThread { onQuality(it) } },
+                    )
+                    analyzer = quality
+                    useCase.setAnalyzer(cameraExecutor, quality)
+                }
+
             val useCaseGroup = UseCaseGroup.Builder()
                 .addUseCase(preview)
                 .addUseCase(imageCapture!!)
+                .addUseCase(analysis)
                 .setViewPort(viewPort)
                 .build()
 
@@ -179,24 +226,54 @@ class ScanActivity : AppCompatActivity() {
         binding.torchIcon.alpha = if (torchOn) 1f else 0.6f
     }
 
+    /**
+     * Reflects the live readiness reading in the instruction line.
+     *
+     * Advisory only — the capture button is never disabled. A gate that
+     * silently refuses to fire is indistinguishable from a broken app to the
+     * operator, and on a label the recogniser happens to misread it would make
+     * the scan impossible rather than merely harder. So this guides framing and
+     * leaves the decision with the person holding the device.
+     */
+    private fun onQuality(reading: LabelQuality) {
+        quality = reading
+        if (capturing || AppPreferences.sampleMode) return
+
+        val hint = reading.hint()
+        binding.instructionHint.setText(
+            when (hint) {
+                LabelQuality.R_NO_TEXT -> R.string.scan_hint_no_text
+                LabelQuality.R_MOVE_CLOSER -> R.string.scan_hint_move_closer
+                LabelQuality.R_STRAIGHTEN -> R.string.scan_hint_straighten
+                else -> R.string.scan_hint_ready
+            }
+        )
+        binding.roiOverlay.setReady(hint == null)
+    }
+
     private fun capture() {
         val capture = imageCapture ?: return
         if (capturing) return
         capturing = true
 
+        // Stop analysing the moment the shutter fires. The frame is decided,
+        // and letting readiness keep updating would rewrite the hint under a
+        // capture that has already been taken.
+        analyzer?.enabled = false
         showProcessing(true)
 
         // Read the ROI on the main thread and hand it to the callback. The
         // capture callback runs on a background executor, and reaching into a
         // View from there to read its geometry would be a data race.
         val roi = binding.roiOverlay.roiFraction()
+        val skew = quality?.takeIf { it.linesInRoi > 0 }?.skewDegrees ?: 0f
 
         capture.takePicture(
             cameraExecutor,
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
-                    val bytes = try {
-                        cropToRoi(image, roi)
+                    val prepared = try {
+                        cropToRoi(image, roi, skew)
                     } catch (e: Exception) {
                         Log.e(TAG, "Crop failed", e)
                         null
@@ -204,6 +281,11 @@ class ScanActivity : AppCompatActivity() {
                         image.close()
                     }
 
+                    if (prepared != null) {
+                        runOnUiThread { freezePreview(prepared.first) }
+                    }
+
+                    val bytes = prepared?.second
                     when {
                         bytes == null ->
                             runOnUiThread { failed(getString(R.string.error_server)) }
@@ -230,7 +312,11 @@ class ScanActivity : AppCompatActivity() {
      * capture share a ViewPort, those fractions address the same region of the
      * captured image.
      */
-    private fun cropToRoi(image: ImageProxy, roi: RectF): ByteArray {
+    private fun cropToRoi(
+        image: ImageProxy,
+        roi: RectF,
+        skewDegrees: Float,
+    ): Pair<Bitmap, ByteArray> {
         val buffer = image.planes[0].buffer
         val raw = ByteArray(buffer.remaining()).also { buffer.get(it) }
 
@@ -250,21 +336,58 @@ class ScanActivity : AppCompatActivity() {
         val right = (roi.right * bitmap.width).roundToInt().coerceIn(left + 1, bitmap.width)
         val bottom = (roi.bottom * bitmap.height).roundToInt().coerceIn(top + 1, bitmap.height)
 
-        val cropped = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+        var cropped = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+
+        // Deskew using the rotation ML Kit measured on the live preview.
+        //
+        // Cropping first and rotating second is deliberate: rotating the whole
+        // frame would resample every pixel of a 12MP capture for the sake of a
+        // small window. Below the threshold the rotation is skipped entirely —
+        // resampling costs a little sharpness, and on text a degree or two of
+        // tilt costs less than the interpolation would.
+        if (kotlin.math.abs(skewDegrees) >= MIN_DESKEW_DEGREES) {
+            val matrix = Matrix().apply { postRotate(-skewDegrees) }
+            cropped = Bitmap.createBitmap(
+                cropped, 0, 0, cropped.width, cropped.height, matrix, true
+            )
+        }
 
         Log.d(
             TAG,
             "Captured ${bitmap.width}x${bitmap.height}, " +
-                "cropped to ${cropped.width}x${cropped.height} (rotation $rotation)"
+                "cropped to ${cropped.width}x${cropped.height} " +
+                "(rotation $rotation, deskew ${"%.1f".format(-skewDegrees)})"
         )
 
-        return ByteArrayOutputStream().use { out ->
+        val bytes = ByteArrayOutputStream().use { out ->
             // Quality 92: label text is small and JPEG ringing around thin
             // strokes costs OCR accuracy directly. The upload is a crop, not a
             // full frame, so the size is affordable.
             cropped.compress(Bitmap.CompressFormat.JPEG, 92, out)
             out.toByteArray()
         }
+        return cropped to bytes
+    }
+
+    /**
+     * Shows the captured still over the live preview.
+     *
+     * The Preview use case keeps streaming after the shutter, so without this
+     * the screen carries on moving while the scan uploads and the operator
+     * cannot tell what was taken — or whether the shutter fired. The frame sent
+     * to the server was always a still; only the display suggested otherwise.
+     */
+    private fun freezePreview(frame: Bitmap) {
+        binding.capturedPreview.setImageBitmap(frame)
+        binding.capturedPreview.visibility = View.VISIBLE
+        binding.roiOverlay.visibility = View.GONE
+    }
+
+    private fun unfreezePreview() {
+        binding.capturedPreview.visibility = View.GONE
+        binding.capturedPreview.setImageDrawable(null)
+        binding.roiOverlay.visibility = View.VISIBLE
+        analyzer?.enabled = true
     }
 
     /**
@@ -279,6 +402,7 @@ class ScanActivity : AppCompatActivity() {
         val total = SampleStore.save(this, bytes)
         showProcessing(false)
         capturing = false
+        unfreezePreview()
 
         if (total == null) {
             failed(getString(R.string.sample_save_failed))
@@ -336,6 +460,9 @@ class ScanActivity : AppCompatActivity() {
     private fun failed(message: String) {
         showProcessing(false)
         capturing = false
+        // Back to the live preview: the operator's next action is to reframe
+        // and try again, and a frozen still they cannot clear would block it.
+        unfreezePreview()
         MaterialAlertDialogBuilder(this)
             .setMessage(message)
             .setPositiveButton(R.string.error_retry, null)
@@ -373,5 +500,12 @@ class ScanActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "ScanActivity"
+
+        /**
+         * Below this, tilt is left alone. Rotation resamples every pixel, and
+         * on small printed text that costs more sharpness than a degree or two
+         * of tilt costs the recogniser.
+         */
+        private const val MIN_DESKEW_DEGREES = 2f
     }
 }

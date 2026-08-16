@@ -35,6 +35,13 @@
     <!-- Camera -->
     <string name="scan_instruction">Place the label inside this window</string>
     <string name="scan_hint">Fill the frame and hold steady</string>
+    <string name="captured_frame">Captured label</string>
+    <!-- Live framing feedback from on-device text detection. Phrased as an
+         action the operator can take, never as a refusal. -->
+    <string name="scan_hint_no_text">No text yet — point at the label</string>
+    <string name="scan_hint_move_closer">Move closer to fill the window</string>
+    <string name="scan_hint_straighten">Straighten the label</string>
+    <string name="scan_hint_ready">Label detected — ready to capture</string>
     <string name="scan_capture">Capture</string>
     <string name="scan_close">Close</string>
     <string name="scan_torch">Torch</string>

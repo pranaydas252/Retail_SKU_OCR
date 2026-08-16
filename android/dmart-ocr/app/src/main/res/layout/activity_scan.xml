@@ -23,6 +23,24 @@
         app:implementationMode="performance"
         app:scaleType="fitCenter" />
 
+    <!--
+        The still that was actually captured, shown over the live preview while
+        the scan is processed.
+
+        Without this the Preview use case keeps streaming after the shutter, so
+        the screen carries on moving and the operator cannot tell what was
+        taken - or whether the shutter fired at all. The uploaded frame was
+        always a still; only the display suggested otherwise.
+    -->
+    <ImageView
+        android:id="@+id/capturedPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:contentDescription="@string/captured_frame"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
     <com.markss.dmartocr.ui.view.RoiOverlayView
         android:id="@+id/roiOverlay"
         android:layout_width="match_parent"

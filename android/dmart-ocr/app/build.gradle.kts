@@ -156,16 +156,15 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.espresso.core)
 
-    // ML Kit text recognition, for the on-device OCR benchmark
-    // (MlKitBenchTest). debugImplementation, not implementation: whether
-    // on-device OCR replaces the server pipeline is still an open question, so
-    // this must not reach the release APK until the numbers justify it.
+    // ML Kit text recognition. Bundled artifact, ~4MB, no Play services —
+    // Zebra ships the TC22 in GMS and AOSP variants and the play-services
+    // artifact does not work on AOSP.
     //
-    // It cannot be androidTestImplementation either. ML Kit bootstraps from a
-    // ContentProvider and needs a context with an application context; an
-    // instrumented test runs in the app-under-test's process, where the test
-    // APK's providers never start and its context has no Application. Putting
-    // the library in the debug app lets it initialise normally and the test
-    // simply uses it.
-    debugImplementation(libs.mlkit.text.recognition)
+    // Not used to extract fields: measured on the sample captures it reaches
+    // 29% on the core fields against the server pipeline's 43%. It is used for
+    // what it is genuinely good at, which is speed — roughly 250ms for a
+    // full-resolution frame, fast enough to run on the preview stream and
+    // judge framing, skew and whether a label is present at all before the
+    // shutter fires.
+    implementation(libs.mlkit.text.recognition)
 }
