@@ -407,3 +407,130 @@ class TestRunTogetherDates:
         from app.services.field_extractor import _split_run_together_dates
 
         assert "\x01" not in _split_run_together_dates("16/06/2615/12/27")
+
+
+class TestSharedDateToken:
+    """Both date labels resolving to one token, with the second date unclaimed.
+
+    Nearest-neighbour association breaks on a slightly skewed capture: the
+    label column drifts down relative to the value column, so by the time the
+    reader reaches "Use By" the offset to its own value exceeds the offset to
+    the row above. Geometry below is from real captures.
+    """
+
+    def test_earlier_date_becomes_manufacture_when_both_labels_collide(self):
+        fields = extract_fields([
+            token("Mfd.:", 143, 199, 75, 39),
+            token("Use By:", 144, 263, 106, 43),
+            token("13/11/25", 306, 229, 242, 59),
+            token("12/08/26", 327, 285, 196, 55),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2025-11-13"
+        assert fields["expiryDate"].normalized.value == "2026-08-12"
+
+    def test_repaired_separators_are_seen_by_the_split(self):
+        # The packs this rule exists for print separators the recogniser reads
+        # as digits: "16/06/2026" arrives as "1610612026". _DATE_TOKEN never
+        # matches those, so the whole token has to be offered to the normalizer.
+        fields = extract_fields([
+            token("Mfg. Date:", 178, 167, 192, 74),
+            token("Use By:", 180, 231, 148, 74),
+            token("1610612026", 482, 142, 211, 62),
+            token("1610112027", 481, 188, 238, 67),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-16"
+        assert fields["expiryDate"].normalized.value == "2027-01-16"
+
+    def test_a_stamped_time_is_not_counted_as_a_third_date(self):
+        # "13:02:38" reads as a valid 2038 date and would silently disable the
+        # rule by making the pack look like it printed three dates.
+        fields = extract_fields([
+            token("Mfd.:", 143, 199, 75, 39),
+            token("Use By:", 144, 263, 106, 43),
+            token("13/11/25", 306, 229, 242, 59),
+            token("13:02:38", 516, 229, 201, 59),
+            token("12/08/26", 327, 285, 196, 55),
+        ])
+
+        assert fields["expiryDate"].normalized.value == "2026-08-12"
+
+    def test_three_real_dates_are_left_alone(self):
+        # Nothing here says which is which, and guessing would be fabrication.
+        fields = extract_fields([
+            token("Mfd.:", 143, 199, 75, 39),
+            token("Use By:", 144, 263, 106, 43),
+            token("13/11/25", 306, 229, 242, 59),
+            token("12/08/26", 327, 285, 196, 55),
+            token("01/01/27", 327, 340, 196, 55),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == fields[
+            "expiryDate"
+        ].normalized.value
+
+
+class TestCodeFieldRejections:
+    def test_statutory_number_is_not_a_batch_code(self):
+        # "Lic. No. 1001" shared a row with the "B.NO." label while the real
+        # value sat on the row below, and was adopted as the batch number.
+        fields = extract_fields([
+            token("B.NO.", 260, 7, 74, 46),
+            token("Lic. No. 1001", 794, 0, 166, 51),
+        ])
+
+        assert "batchNumber" not in fields
+
+    def test_garbled_non_latin_code_is_rejected_not_tidied(self):
+        # normalize_code would strip the CJK glyph and return a clean-looking
+        # "LFF0359". Section 24 rates a missing code above a wrong one.
+        fields = extract_fields([
+            token("Batch No:", 155, 194, 166, 55),
+            token("L\u4e09F.F0.359", 428, 189, 334, 46),
+        ])
+
+        assert "batchNumber" not in fields
+
+    def test_ordinary_batch_code_still_extracts(self):
+        fields = extract_fields([
+            token("Batch No:", 155, 194, 166, 55),
+            token("B260515", 428, 189, 334, 46),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "B260515"
+
+
+class TestStampBatchReachability:
+    def test_batch_is_inferred_when_the_stamp_prints_two_dates(self):
+        # The most common stamp layout there is. This used to sit behind an
+        # early return in the two-date branch, so exactly these packs never had
+        # their batch inferred.
+        fields = extract_fields([
+            token("SB3114C", 383, 193, 122, 54),
+            token("08/10/25 07/10/26", 500, 183, 251, 63),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "SB3114C"
+
+    def test_footnote_marker_is_not_part_of_the_code(self):
+        # A pack tying label to value with "#" and "*" delivers "#RC-DS5720",
+        # which failed the very first character of the stamp-code pattern.
+        fields = extract_fields([
+            token("#RC-DS5720", 313, 322, 273, 44),
+            token("*07.2025", 311, 365, 233, 43),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "RC-DS5720"
+
+
+class TestMisreadSlashPrice:
+    def test_rupee_slash_dash_read_as_one_still_yields_a_price(self):
+        # "190/-" comes back as "1901-" on a dot-matrix stamp: the same
+        # slash-as-1 confusion the date repair exists for.
+        fields = extract_fields([
+            token("MRP", 100, 150, 80, 40),
+            token("1901-30.251g", 163, 200, 207, 55),
+        ])
+
+        assert fields["mrp"].normalized.value == "190.00"
