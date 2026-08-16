@@ -96,8 +96,19 @@ class Settings(BaseSettings):
     # measured against a corpus, and the corpus is being recollected.
     vlm_enabled: bool = False
     vlm_base_url: str = "http://127.0.0.1:11434"
-    vlm_model: str = "hf.co/PaddlePaddle/PaddleOCR-VL-1.5-GGUF:latest"
-    vlm_timeout_seconds: int = 180
+    # qwen2.5vl:3b, chosen on measurement rather than on name.
+    #
+    #   engine                        core   Eno inkjet stamp
+    #   qwen2.5vl:3b                   53%   read it
+    #   PaddleOCR-VL-1.5-GGUF          36%   two lines, then stopped
+    #
+    # The 53%/36% figures are from the previous corpus and the older extractor,
+    # so both will move when the new corpus lands; the ordering is what matters
+    # and it is consistent with the per-pack result. PaddleOCR-VL stays
+    # installed and configurable — it is five times faster, and if a future
+    # corpus says it is enough, that is a switch of one setting.
+    vlm_model: str = "qwen2.5vl:3b"
+    vlm_timeout_seconds: int = 300
 
     # How the model is asked, which is a property of the model and not a
     # preference. Measured 2026-08-16: PaddleOCR-VL ignores an instruction to
@@ -127,14 +138,16 @@ class Settings(BaseSettings):
     # Deliberately NOT ocr_det_limit_side_len. That 960 is PP-OCRv5's detector
     # limit; a vision-language model has no detector and reads the whole image
     # at a fixed token budget, so the two have no reason to share a number.
-    # 1600 keeps a 2692x1224 ROI crop legible without the cost of full size.
-    vlm_max_side: int = 1600
+    # 1024 is what the per-pack results above were measured at. Above it the
+    # cost climbs steeply for no gain seen so far: the same pack took 14.4s at
+    # 768, 29.5s at 1024 and over 100s at 1600 on one model.
+    vlm_max_side: int = 1024
 
     # Guards against degenerate generation, both measured. Vision models on
     # dense label text fall into repeat loops - emitting "1.00 2.00 3.00..."
     # or LaTeX - and a capped prediction length with a repeat penalty took one
     # model from 25.3s to 3.3s per image with no loss of real output.
-    vlm_max_tokens: int = 220
+    vlm_max_tokens: int = 300
     vlm_repeat_penalty: float = 1.15
     vlm_temperature: float = 0.0
 

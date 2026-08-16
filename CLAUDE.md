@@ -63,7 +63,6 @@ Do not introduce the following unless the user explicitly asks later:
 - PostgreSQL
 - Vector databases
 - LLMs
-- Vision-language models
 - GPU inference
 - AI agent frameworks
 - Machine-learning training pipelines
@@ -73,6 +72,34 @@ Do not introduce the following unless the user explicitly asks later:
 - Complex distributed processing
 
 Keep the implementation small, understandable, and suitable for a fast R&D POC.
+
+### Pivot, 2026-08-16 — a vision-language model is now in scope
+
+Vision-language models were on the excluded list above. They are no longer,
+because the exclusion assumed PP-OCRv5 could read the labels and it cannot read
+all of them.
+
+Measured on a TC22 capture of an Eno carton: the pack's **printed** field names
+came back at 0.95–0.99 confidence, and the **inkjet values** beside them at
+0.05–0.53, as `Phm`, `Voow`, `JAND`, `4000`. Those values are 218–291 px tall in
+the original, so it is not a resolution problem. All three PP-OCRv5 recognition
+models (`PP-OCRv5_mobile_rec`, `en_PP-OCRv5_mobile_rec`, `PP-OCRv5_server_rec`)
+were tried and none read them. `scripts/extraction_headroom.py` puts the whole
+engine's ceiling at **66%** even with a perfect extractor, against the 95% target
+in section 24.
+
+`qwen2.5vl:3b` reads that stamp. It runs **locally on CPU through Ollama** — no
+cloud, no GPU, no cost, which keeps the constraints of this section intact.
+
+Rules that still apply:
+
+- It is a **second engine, not a replacement.** PP-OCRv5 remains the primary.
+- Its output goes through the **same** extraction, normalization, validation and
+  confidence path, so its accuracy is directly comparable.
+- It stays **off by default** until measured against a corpus.
+- Everything else on the excluded list above stays excluded.
+
+GPU inference, cloud APIs and any training or fine-tuning remain out of scope.
 
 ---
 
