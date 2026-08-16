@@ -114,6 +114,51 @@ class TestOcrArtifactRepair:
         assert normalizer.normalize_date(raw, "day").value == expected
 
     @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # Measured on a TC22 capture of a foil pack, SCAN-000219. The pack
+            # prints "EXP.10/2026" in dot-matrix; PP-OCRv5 read the slash as a
+            # 7 and returned "EXP.1072026", which matched no date pattern, so
+            # the expiry was reported as never found. The digits were all
+            # correct — only the separator was wrong.
+            ("EXP.1072026", "2026-10"),
+            # The same pack's manufacturing date, whose slash was read
+            # correctly. Included so the repair is shown not to disturb it.
+            ("MFG.11/2024", "2024-11"),
+            # The other substitution on the same two-part shape.
+            ("1112024", "2024-11"),
+            ("1072026", "2026-10"),
+        ],
+    )
+    def test_slash_recognised_as_seven_is_repaired(self, raw, expected):
+        assert normalizer.normalize_date(raw, "month").value == expected
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # Three-part dates, both separators misread the same way.
+            ("1670672026", "2026-06-16"),
+            ("1610612026", "2026-06-16"),
+        ],
+    )
+    def test_three_part_repair_accepts_either_substitution(self, raw, expected):
+        assert normalizer.normalize_date(raw, "day").value == expected
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "GSB0134",      # a real batch code from the same pack
+            "9972026",      # month 99 is not a month
+            "1071899",      # 1899 is not a year this pipeline will ever see
+            "1234567",      # seven digits, but the middle is neither 1 nor 7
+        ],
+    )
+    def test_two_part_repair_does_not_manufacture_dates(self, raw):
+        # The two-part form is only three characters away from an ordinary
+        # seven-digit code, so its guards are the whole safety argument.
+        assert normalizer.normalize_date(raw, "month").value is None
+
+    @pytest.mark.parametrize(
         "raw",
         [
             "9876543210",   # phone number

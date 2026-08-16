@@ -119,18 +119,32 @@ def _month_from_name(text: str) -> int | None:
     return None
 
 
-#: A date whose separators were recognised as the digit 1.
+#: A date whose separators were recognised as a digit.
 #:
-#: On thin inkjet print a forward slash and a "1" are nearly the same mark, and
-#: the recogniser returns "16/06/2026" as "1610612026". The digits are all
-#: correct — only the separators are wrong — so the value is recoverable, but a
-#: greedy date match reads the run as a licence number and gives up. Two of the
-#: captures were counted as "never recognised" for exactly this reason.
+#: On thin inkjet and dot-matrix print a forward slash is nearly the same mark
+#: as a "1", and on a slanted dot-matrix stamp it is nearly the same mark as a
+#: "7". The recogniser returns "16/06/2026" as "1610612026", and — measured on
+#: a TC22 capture of a foil pack printing "EXP.10/2026" — returns "1072026".
 #:
-#: Deliberately narrow: the 1s must sit exactly where separators belong, and
-#: the day and month either side must be real. A phone number or a batch code
-#: will not satisfy all three conditions at once.
-_SLASH_AS_ONE = re.compile(r"^(\d{2})1(\d{2})1(\d{2}|\d{4})$")
+#: The digits either side are all correct; only the separator is wrong. But a
+#: greedy date match reads the whole run as a licence number and gives up, so
+#: the field is reported as never recognised. Three captures were lost this
+#: way before the repair existed, and one after it, because it only knew
+#: about "1".
+#:
+#: Deliberately narrow. The substituted digit must sit exactly where a
+#: separator belongs, both separators in a three-part date must be the SAME
+#: misread character — one glyph, one systematic error — and every component
+#: either side must be a real day, month and year. A phone number or a batch
+#: code does not satisfy all of those at once.
+_SLASH_AS_DIGIT_DMY = re.compile(r"^(\d{2})([17])(\d{2})\2(\d{2}|\d{4})$")
+
+#: The same failure on a two-part MM/YYYY stamp, which is what Indian FMCG
+#: packs print most often. "10/2026" -> "1072026", "11/2024" -> "1112024".
+#:
+#: The year must be four digits and this century. A two-digit year would make
+#: the pattern five characters long and match far too much.
+_SLASH_AS_DIGIT_MY = re.compile(r"^(\d{2})([17])(\d{4})$")
 
 #: A complete day-month-year date, wherever it sits in a noisy token.
 #:
@@ -148,16 +162,30 @@ _EMBEDDED_DATE = re.compile(
 )
 
 
-def _repair_slash_read_as_one(text: str) -> str:
-    """Put the separators back into DD1MM1YYYY, when the parts are valid."""
-    match = _SLASH_AS_ONE.match(text)
-    if not match:
+def _repair_slash_read_as_digit(text: str) -> str:
+    """Put the separators back into a date whose slashes were read as digits.
+
+    Handles DD?MM?YYYY and MM?YYYY, where ? is a 1 or a 7. Returns the text
+    unchanged when the components either side are not a real date, which is
+    what keeps a batch code or a licence number from being rewritten into one.
+    """
+    match = _SLASH_AS_DIGIT_DMY.match(text)
+    if match:
+        day, _, month, year = match.groups()
+        if 1 <= int(day) <= 31 and 1 <= int(month) <= 12:
+            return f"{day}/{month}/{year}"
         return text
 
-    day, month, year = match.groups()
-    if not 1 <= int(day) <= 31 or not 1 <= int(month) <= 12:
+    match = _SLASH_AS_DIGIT_MY.match(text)
+    if match:
+        month, _, year = match.groups()
+        # A month out of range, or a year outside this century, means the run
+        # is something else that happens to be seven digits long.
+        if 1 <= int(month) <= 12 and 2000 <= int(year) <= 2099:
+            return f"{month}/{year}"
         return text
-    return f"{day}/{month}/{year}"
+
+    return text
 
 
 def _strip_leading_junk(text: str) -> str:
@@ -208,7 +236,7 @@ def normalize_date(raw: str, precision: str = "month") -> NormalizedValue:
     text = re.sub(r"^(MFG|MFD|EXP|EXPIRY|PKD|PACKED|USE BEFORE|BEST BEFORE)[.:\s]*", "", text)
     text = text.strip(" .:-–—")
 
-    text = _repair_slash_read_as_one(text)
+    text = _repair_slash_read_as_digit(text)
     text = _strip_leading_junk(text)
 
     named = _try_named_month(text)
