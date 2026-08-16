@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from app.config import Settings
 from app.services.ocr_service import OcrService, OcrToken
 
 
@@ -105,3 +106,64 @@ class TestGeometry:
         assert token.center == (60.0, 40.0)
         assert token.right == 110
         assert token.bottom == 60
+
+
+class TestRotatedRescue:
+    """The gate around re-reading a box rotated upright.
+
+    PP-OCRv5 detects vertical text correctly but recognises it sideways. The
+    rescue crops such a box and rotates it, but only under conditions worth
+    two extra recognition passes. Those conditions are what is tested here;
+    the recognition itself is stubbed, so no models and no network.
+    """
+
+    IMAGE = np.zeros((400, 400, 3), dtype=np.uint8)
+
+    def service(self, rotated_text: str, rotated_confidence: float) -> OcrService:
+        service = OcrService(Settings(ocr_retry_rotated_boxes=True))
+        service._read_plain = lambda _image: (rotated_text, rotated_confidence)
+        return service
+
+    def test_tall_low_confidence_box_is_replaced(self):
+        token = OcrToken("nokdaa", x=50, y=50, width=56, height=238, confidence=0.40)
+        rescued = self.service("keep your", 0.92)._rescue_rotated(self.IMAGE, token)
+
+        assert rescued.text == "keep your"
+        assert rescued.confidence == 0.92
+
+    def test_replacement_keeps_the_original_geometry(self):
+        # Section 9 associates a label with its value by position. The text is
+        # read from a rotated crop, but the box must keep describing where the
+        # text sits on the pack.
+        token = OcrToken("H", x=50, y=60, width=75, height=258, confidence=0.16)
+        rescued = self.service("MADE IN BIHAR", 0.98)._rescue_rotated(self.IMAGE, token)
+
+        assert (rescued.x, rescued.y) == (50, 60)
+        assert (rescued.width, rescued.height) == (75, 258)
+
+    def test_wide_box_is_left_alone(self):
+        # Ordinary horizontal label text, however badly it read.
+        token = OcrToken("Phm", x=10, y=10, width=200, height=40, confidence=0.05)
+        rescued = self.service("rewritten", 0.99)._rescue_rotated(self.IMAGE, token)
+
+        assert rescued is token
+
+    def test_confident_tall_box_is_left_alone(self):
+        # A tall box read confidently is usually one large character, not a
+        # rotated line, and rereading it would waste two passes.
+        token = OcrToken("7", x=10, y=10, width=40, height=200, confidence=0.97)
+        rescued = self.service("rewritten", 0.99)._rescue_rotated(self.IMAGE, token)
+
+        assert rescued is token
+
+    def test_marginal_improvement_does_not_overwrite(self):
+        # Without a margin, noise-level differences would rewrite correct text.
+        token = OcrToken("ioom", x=10, y=10, width=40, height=200, confidence=0.51)
+        rescued = self.service("ICOi", 0.55)._rescue_rotated(self.IMAGE, token)
+
+        assert rescued is token
+
+    def test_rescue_is_off_by_default(self):
+        # Measured on the corpus: the rescue fires but wins no fields. It must
+        # not turn itself on.
+        assert Settings().ocr_retry_rotated_boxes is False

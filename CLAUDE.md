@@ -500,6 +500,32 @@ Start with **`PP-OCRv5_server_det` + `PP-OCRv5_mobile_rec`**: detection quality 
 
 Both model names must be configurable so all four combinations can be A/B tested against real label images. Do not hard-code a model name in service code.
 
+### The ceiling is recognition, not detection — measured 2026-08-16
+
+Before changing OCR engine, know which half is failing. It is not the half most
+people assume.
+
+On the 20-image gated corpus PP-OCRv5 produces **284 detection boxes, and the
+values it gets wrong are among them**. 12% of boxes come back below 0.50
+confidence, several as empty strings. On `SAMPLE_20260816_200214_286` the batch
+stamp is the *largest box in the image* and recognition returns `''`.
+
+Consequences, and they are binding:
+
+- **Do not replace the whole engine.** Tesseract, Surya, EasyOCR and docTR are
+  full-stack detectors *and* recognisers. Swapping to one discards a detector
+  that works to fix a recogniser that does not. If an alternative is tried, try
+  it as a **recogniser only**, on the boxes PP-OCRv5 already flagged as bad.
+- **Check Surya's licence before spending time on it.** It carries a
+  commercial-use revenue restriction that D-Mart is far above.
+- **Feed the VLM per-box crops at native resolution**, not the whole image at
+  `vlm_max_side`. The detector has already localised the hard regions.
+
+Three cheap fixes were measured and **all won zero core points**: re-cropping
+bad boxes at full resolution, morphological closing to bridge inkjet dots, and
+rotating tall boxes upright. See `PLAN.md` → Engine alternatives. Do not re-run
+them on this corpus expecting a different answer.
+
 ### Built-in preprocessing stages
 
 The 3.x pipeline exposes two stages that overlap with the OpenCV work in section 7:

@@ -19,13 +19,21 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+import cv2
 import numpy as np
 
 from app.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+#: Margin added around a detection box before re-reading it. Detection hugs
+#: the ink, and the recogniser reads a line better with a little quiet space.
+_CROP_PAD = 0.06
+
+#: Crops smaller than this in either axis carry no readable text.
+_MIN_CROP_PX = 8
 
 
 @dataclass(frozen=True)
@@ -148,7 +156,101 @@ class OcrService:
         if not results:
             return []
 
-        return self._to_tokens(results[0], variant)
+        tokens = self._to_tokens(results[0], variant)
+
+        if self._settings.ocr_retry_rotated_boxes:
+            tokens = [self._rescue_rotated(image, t) for t in tokens]
+
+        return tokens
+
+    # -- rotated text rescue ----------------------------------------------
+
+    def _rescue_rotated(self, image: np.ndarray, token: OcrToken) -> OcrToken:
+        """Re-read a tall, low-confidence box after rotating it upright.
+
+        Detection handles vertical text correctly; recognition reads it
+        sideways and returns near-garbage at low confidence. Cropping the
+        detected box and rotating it 90 degrees recovers the line.
+
+        The bounding box is deliberately left untouched. Field extraction
+        associates a label with its value by position (section 9), so the
+        geometry must keep describing where the text sits on the pack, not
+        where it sat inside a temporary rotated crop.
+
+        Returns the original token unchanged when the rotation does not
+        clearly beat it.
+        """
+        s = self._settings
+        if token.height < token.width * s.ocr_rotated_aspect_ratio:
+            return token
+        if token.confidence >= s.ocr_rotated_max_confidence:
+            return token
+
+        crop = self._padded_crop(image, token)
+        if crop is None:
+            return token
+
+        best_text, best_confidence = token.text, token.confidence
+        for rotation in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+            text, confidence = self._read_plain(cv2.rotate(crop, rotation))
+            if text and confidence > best_confidence:
+                best_text, best_confidence = text, confidence
+
+        if best_confidence < token.confidence + s.ocr_rotated_min_gain:
+            return token
+
+        logger.debug(
+            "Rotated box re-read",
+            extra={
+                "before": token.text,
+                "beforeConfidence": round(token.confidence, 3),
+                "after": best_text,
+                "afterConfidence": round(best_confidence, 3),
+            },
+        )
+        return replace(token, text=best_text, confidence=best_confidence)
+
+    @staticmethod
+    def _padded_crop(image: np.ndarray, token: OcrToken) -> np.ndarray | None:
+        """The token's region plus a small margin, or None if unusable.
+
+        The margin matters: a detection box hugs the ink, and the recogniser
+        reads a line noticeably better with a little quiet space around it.
+        """
+        pad_x = int(token.width * _CROP_PAD)
+        pad_y = int(token.height * _CROP_PAD)
+
+        x1 = max(0, token.x - pad_x)
+        y1 = max(0, token.y - pad_y)
+        x2 = min(image.shape[1], token.right + pad_x)
+        y2 = min(image.shape[0], token.bottom + pad_y)
+
+        if x2 - x1 < _MIN_CROP_PX or y2 - y1 < _MIN_CROP_PX:
+            return None
+        return image[y1:y2, x1:x2]
+
+    def _read_plain(self, image: np.ndarray) -> tuple[str, float]:
+        """Recognise an image and flatten it to one string and one score.
+
+        Runs the engine directly rather than through recognize(), which would
+        re-enter the rotation rescue and recurse.
+        """
+        try:
+            results = self._ensure_engine().predict(image)
+        except Exception:  # a rescue attempt must never fail the scan
+            logger.warning("Rotated re-read failed", exc_info=True)
+            return "", 0.0
+
+        if not results:
+            return "", 0.0
+
+        tokens = self._to_tokens(results[0], None)
+        texts = [t.text for t in tokens if t.text.strip()]
+        if not texts:
+            return "", 0.0
+
+        scores = [t.confidence for t in tokens if t.text.strip()]
+        return " ".join(texts), sum(scores) / len(scores)
 
     @staticmethod
     def _to_tokens(result, variant: str | None) -> list[OcrToken]:

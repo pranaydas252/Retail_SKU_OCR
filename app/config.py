@@ -79,6 +79,47 @@ class Settings(BaseSettings):
 
     ocr_warmup_on_startup: bool = True
 
+    # --- Rotated text rescue ---------------------------------------------
+    #
+    # PP-OCRv5 detects vertical text correctly but recognises it sideways.
+    # Measured on SAMPLE_20260816_195846_975, cropping the detected box and
+    # rotating it 90 degrees clockwise before re-reading:
+    #
+    #   as printed        rotated 90 cw
+    #   ----------------  -------------------
+    #   "ueep Ao"  0.54   "city clean"   0.97
+    #   "8H30"     0.29   "MADEINBHAR"   0.98
+    #   "nokdaa"   0.61   "keep your"    0.92
+    #
+    # use_textline_orientation is the built-in answer to this and it rescued
+    # only one of those three, so the rescue is done explicitly instead.
+    #
+    # MEASURED ON THE CORPUS, AND IT WON NOTHING. It fires: 11 tokens were
+    # rewritten across the 20 images, several from nothing to a confident read
+    # ("" -> "CPMSGP90CN324C" at 1.00, "" -> "city clean" at 0.99, "0" at 0.19
+    # -> "461080" at 1.00). But every rescued string is boilerplate - trademark
+    # lines, care instructions, a pincode, "MADE IN BIHAR" - and not one is a
+    # target field. Core stayed at 45%, codes at 29%, false accepts at 0, and
+    # the run cost 0.3s/image more.
+    #
+    # It stays, off, because the capability is correct and Indian FMCG does
+    # print dates vertically on pouches; the corpus simply has none. Do not
+    # re-test it on this corpus expecting a different answer.
+    ocr_retry_rotated_boxes: bool = False
+
+    # A box taller than this multiple of its width is treated as possibly
+    # vertical. Ordinary label text is wider than tall by a wide margin.
+    ocr_rotated_aspect_ratio: float = 1.3
+
+    # Only boxes the recogniser was already unsure about are retried. A tall
+    # box read confidently is usually a single large character, not a rotated
+    # line, and rereading it wastes two passes.
+    ocr_rotated_max_confidence: float = 0.90
+
+    # The rotated read must beat the original by this margin to replace it.
+    # Without a margin, noise-level differences would rewrite correct text.
+    ocr_rotated_min_gain: float = 0.15
+
     # Preprocessing variants to run and compare, in priority order. Keep this
     # list short — CLAUDE.md section 7 forbids a combination explosion, and
     # each variant costs a full OCR pass.
