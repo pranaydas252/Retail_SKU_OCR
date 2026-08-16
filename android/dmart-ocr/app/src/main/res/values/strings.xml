@@ -41,6 +41,10 @@
     <string name="scan_hint_no_text">No text yet — point at the label</string>
     <string name="scan_hint_move_closer">Move closer to fill the window</string>
     <string name="scan_hint_straighten">Straighten the label</string>
+    <string name="scan_hint_aim_panel">Aim at the batch / MRP panel</string>
+    <string name="scan_hint_hold_steady">Hold steady — text is not sharp</string>
+    <string name="settings_bluetooth_requested">Allow Bluetooth, then tap Test print again</string>
+    <string name="settings_bluetooth_blocked">Bluetooth is blocked. Enable it in Settings, then tap Test print again</string>
     <string name="scan_hint_ready">Label detected — ready to capture</string>
     <string name="scan_capture">Capture</string>
     <string name="scan_close">Close</string>

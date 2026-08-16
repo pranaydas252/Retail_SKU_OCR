@@ -245,6 +245,8 @@ class ScanActivity : AppCompatActivity() {
                 LabelQuality.R_NO_TEXT -> R.string.scan_hint_no_text
                 LabelQuality.R_MOVE_CLOSER -> R.string.scan_hint_move_closer
                 LabelQuality.R_STRAIGHTEN -> R.string.scan_hint_straighten
+                LabelQuality.R_AIM_AT_PANEL -> R.string.scan_hint_aim_panel
+                LabelQuality.R_HOLD_STEADY -> R.string.scan_hint_hold_steady
                 else -> R.string.scan_hint_ready
             }
         )

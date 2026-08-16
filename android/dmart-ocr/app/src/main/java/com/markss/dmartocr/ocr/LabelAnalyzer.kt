@@ -46,7 +46,23 @@ class LabelAnalyzer(
         val roi = LabelQuality.roiInImage(roiProvider(), uprightWidth, uprightHeight)
 
         recognizer.process(input)
-            .addOnSuccessListener { text -> onResult(LabelQuality.of(text, roi)) }
+            .addOnSuccessListener { text ->
+                val quality = LabelQuality.of(text, roi)
+                if (android.util.Log.isLoggable(TAG, android.util.Log.DEBUG)) {
+                    // Both angle sources, so a disagreement between what ML Kit
+                    // reports and what the corner points measure is visible in
+                    // a log rather than only as a wrong hint on screen.
+                    val reported = text.textBlocks.flatMap { it.lines }
+                        .joinToString { "%.0f".format(it.angle) }
+                    android.util.Log.d(
+                        TAG,
+                        "lines=${quality.linesInRoi} label=${quality.hasFieldLabel} " +
+                            "skew=%.1f conf=%.2f reportedAngles=[$reported]"
+                                .format(quality.skewDegrees, quality.confidence)
+                    )
+                }
+                onResult(quality)
+            }
             .addOnFailureListener { onResult(LabelQuality(0, false, 0f, 0f)) }
             // Closing only when recognition finishes is what applies the
             // backpressure: CameraX will not deliver the next frame until this
@@ -55,4 +71,8 @@ class LabelAnalyzer(
     }
 
     fun close() = recognizer.close()
+
+    companion object {
+        const val TAG = "LabelAnalyzer"
+    }
 }

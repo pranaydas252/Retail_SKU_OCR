@@ -22,6 +22,7 @@ object AppPreferences {
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_PRINTER_MAC = "printer_mac"
     private const val KEY_SAMPLE_MODE = "sample_mode"
+    private const val KEY_BLUETOOTH_ASKED = "bluetooth_asked"
 
     private val MAC_PATTERN = Regex("^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
@@ -49,6 +50,17 @@ object AppPreferences {
     var sampleMode: Boolean
         get() = prefs.getBoolean(KEY_SAMPLE_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SAMPLE_MODE, value).apply()
+
+    /**
+     * Whether the Bluetooth permission prompt has been shown at least once.
+     *
+     * Needed to tell "never asked" from "denied permanently". Android reports
+     * both as no-rationale-needed, so without this the first tap would send the
+     * operator to Settings instead of showing them the prompt.
+     */
+    var bluetoothAsked: Boolean
+        get() = prefs.getBoolean(KEY_BLUETOOTH_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_BLUETOOTH_ASKED, value).apply()
 
     /** Zebra ZQ320 Bluetooth MAC. Consumed by printing in Phase 5. */
     var printerMac: String

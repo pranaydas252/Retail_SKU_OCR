@@ -23,6 +23,58 @@ import kotlinx.coroutines.launch
  */
 object SettingsDialog {
 
+    /**
+     * Prompts for the Bluetooth permissions the printer needs.
+     *
+     * @return true when a prompt was raised and the caller should stop; false
+     *         when everything needed is already granted.
+     *
+     * Uses the platform request directly rather than an ActivityResultLauncher
+     * because this is a dialog, and a launcher has to be registered before the
+     * host reaches STARTED. The operator taps Test print again after granting,
+     * which is acceptable on a configuration screen used once per device.
+     */
+    private fun requestBluetoothIfNeeded(
+        context: Context,
+        binding: DialogSettingsBinding,
+    ): Boolean {
+        val activity = context as? android.app.Activity ?: return false
+        val missing = BluetoothLabelPrinter(context).missingPermissions()
+        if (missing.isEmpty()) return false
+
+        binding.testPrintResult.visibility = View.VISIBLE
+        binding.testPrintResult.setTextColor(
+            ContextCompat.getColor(context, R.color.text_secondary)
+        )
+
+        // "Don't ask again" leaves the rationale flag false for a permission
+        // that was never granted, and requesting again then shows nothing at
+        // all. Sending the operator to Settings is the only honest move.
+        val blocked = missing.none {
+            androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+        }
+
+        if (blocked && AppPreferences.bluetoothAsked) {
+            binding.testPrintResult.setText(R.string.settings_bluetooth_blocked)
+            context.startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", context.packageName, null),
+                )
+            )
+            return true
+        }
+
+        AppPreferences.bluetoothAsked = true
+        binding.testPrintResult.setText(R.string.settings_bluetooth_requested)
+        androidx.core.app.ActivityCompat.requestPermissions(
+            activity, missing.toTypedArray(), REQUEST_BLUETOOTH
+        )
+        return true
+    }
+
+    private const val REQUEST_BLUETOOTH = 4021
+
     fun show(context: Context, onSaved: () -> Unit) {
         val binding = DialogSettingsBinding.inflate(LayoutInflater.from(context))
         val scope = (context as LifecycleOwner).lifecycleScope
@@ -52,6 +104,14 @@ object SettingsDialog {
             }
             // Saved first so the printer uses what is on screen, not a stale value.
             AppPreferences.printerMac = mac
+
+            // Ask for Bluetooth before trying, rather than reporting afterwards
+            // that it was missing. Test print used to print "Bluetooth
+            // permission is required to print." and then do nothing — the
+            // operator has no way to know that means a system dialog they were
+            // never shown. ResultActivity has always prompted; this path did
+            // not, and it is the one an installer reaches first.
+            if (requestBluetoothIfNeeded(context, binding)) return@setOnClickListener
 
             binding.testPrintButton.isEnabled = false
             binding.testPrintResult.visibility = View.VISIBLE
