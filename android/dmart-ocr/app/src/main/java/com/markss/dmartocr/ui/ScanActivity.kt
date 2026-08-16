@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.util.Size
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +26,9 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCaseGroup
 import androidx.camera.core.ViewPort
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -197,9 +201,36 @@ class ScanActivity : AppCompatActivity() {
             // so the ROI fractions address the same physical region in all
             // three. Without that the gate would judge a different area than
             // the one the operator is aiming at.
+            //
+            // The resolution is set explicitly, and that matters more than it
+            // looks. ImageAnalysis defaults to 640x480, so the gate was judging
+            // a frame far worse than the one it goes on to upload — on a real
+            // pack it found five lines of text on one frame and one on the
+            // next, which the smoothing then read as the operator waving the
+            // device about. The label was not moving; the recogniser was
+            // failing on half the frames.
+            //
+            // 1280x720 is affordable: the 252ms ML Kit measurement that
+            // justified this whole approach was taken on FULL-resolution
+            // captures, so 720p is comfortably inside a budget already proven
+            // on device. Sizing it from the benchmark, rather than leaving the
+            // default, is the correction — the number that justified the design
+            // was never the number the design ran at.
+            //
+            val analysisResolution = ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        Size(1280, 720),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                    )
+                )
+                .build()
+
             val analysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setTargetRotation(imageCapture!!.targetRotation)
+                .setResolutionSelector(analysisResolution)
                 .build()
                 .also { useCase ->
                     val quality = LabelAnalyzer(

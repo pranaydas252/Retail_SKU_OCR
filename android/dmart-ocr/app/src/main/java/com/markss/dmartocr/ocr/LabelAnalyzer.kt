@@ -56,7 +56,13 @@ class LabelAnalyzer(
                         .joinToString { "%.0f".format(it.angle) }
                     android.util.Log.d(
                         TAG,
-                        "lines=${quality.linesInRoi} label=${quality.hasFieldLabel} " +
+                        // The frame size is logged because it is the thing that
+                        // was silently wrong: ImageAnalysis defaults to 640x480
+                        // and the gate was scoring that while the upload was
+                        // full resolution. A number on screen beats a default
+                        // nobody checked.
+                        "frame=${uprightWidth}x$uprightHeight " +
+                            "lines=${quality.linesInRoi} label=${quality.hasFieldLabel} " +
                             "skew=%.1f conf=%.2f reportedAngles=[$reported]"
                                 .format(quality.skewDegrees, quality.confidence)
                     )
