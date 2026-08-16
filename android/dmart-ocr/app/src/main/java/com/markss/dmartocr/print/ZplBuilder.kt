@@ -51,13 +51,33 @@ object ZplBuilder {
      */
     private val QR_QUIET_ZONE_DOTS = 4 * QR_MAGNIFICATION
 
-    private val MARGIN_DOTS = mm(3f)
+    private val MARGIN_DOTS = mm(2f)
     private val TITLE_HEIGHT_DOTS = mm(4.5f)
     private val LABEL_TEXT_HEIGHT_DOTS = mm(2.6f)
     private val VALUE_TEXT_HEIGHT_DOTS = mm(3.2f)
     private val ROW_SPACING_DOTS = mm(4.6f)
 
     private const val DARKNESS = 20
+
+    /**
+     * Continuous media, no gap or black-mark sensing.
+     *
+     * This is what stops the printer feeding a long blank strip around every
+     * label. Left unset, the ZQ320 uses whatever tracking mode is saved in its
+     * own configuration; if that is gap or mark sensing and the printer is
+     * loaded with plain continuous receipt stock — which it is — it feeds
+     * looking for a registration mark that does not exist, and only gives up
+     * after running out a large amount of media. The ink was never the problem
+     * and `^LL` alone cannot fix it, because the feed happens outside the
+     * format's own length.
+     *
+     * `^LL` is still required: in continuous mode it is the only thing that
+     * tells the printer where the label ends.
+     *
+     * If this printer is ever loaded with die-cut or black-mark labels, this
+     * must change to `^MNY`/`^MNM` or registration will be lost.
+     */
+    private const val MEDIA_TRACKING = "^MNN"
 
     /**
      * Capacity of QR version 5 at error correction M, in alphanumeric mode.
@@ -71,10 +91,15 @@ object ZplBuilder {
     /**
      * Builds a complete print job.
      *
+     * The scan code is deliberately NOT printed. It is already inside the QR
+     * payload, where a scanner reads it perfectly and an operator never has to;
+     * printed as text it was a line of machine identifier at the top of a label
+     * whose entire readable content is the five fields below it.
+     *
      * @param qrPayload the payload from the backend's confirm response. The
      *   backend owns this format so the app and server cannot disagree on it.
      */
-    fun label(scanCode: String, rows: List<Row>, qrPayload: String): String {
+    fun label(rows: List<Row>, qrPayload: String): String {
         require(qrPayload.length <= MAX_QR_PAYLOAD_CHARS) {
             "QR payload is ${qrPayload.length} chars; over $MAX_QR_PAYLOAD_CHARS it " +
                 "exceeds QR version 5 and overflows the 10mm box"
@@ -94,16 +119,20 @@ object ZplBuilder {
         body.append("^FO$MARGIN_DOTS,$y^GB$textWidth,0,2^FS")
         y += mm(2.5f)
 
-        val scanY = y
-        body.append("^CF0,$LABEL_TEXT_HEIGHT_DOTS")
-        body.append("^FO$MARGIN_DOTS,$scanY^FD${escape(scanCode)}^FS")
-        y += ROW_SPACING_DOTS
+        val blockTop = y
+
+        // Bottom of the ink, as opposed to where the next row would have gone.
+        // Using `y` after the loop counted one whole row of spacing that nothing
+        // was ever printed on, and every label carried that much blank media at
+        // the end of it.
+        var inkBottom = y
 
         rows.forEach { row ->
             body.append("^CF0,$LABEL_TEXT_HEIGHT_DOTS")
             body.append("^FO$MARGIN_DOTS,$y^FD${escape(row.label)}^FS")
             body.append("^CF0,$VALUE_TEXT_HEIGHT_DOTS")
             body.append("^FO${MARGIN_DOTS + mm(22f)},${y - mm(0.4f)}^FD${escape(row.value)}^FS")
+            inkBottom = y + VALUE_TEXT_HEIGHT_DOTS
             y += ROW_SPACING_DOTS
         }
 
@@ -113,16 +142,21 @@ object ZplBuilder {
         // ^FD<errorCorrection><inputMode>,<data>  — A selects automatic input
         // mode, which picks alphanumeric for an uppercased payload and packs
         // two characters per 11 bits.
-        body.append("^FO$qrX,$scanY")
+        body.append("^FO$qrX,$blockTop")
         body.append("^BQN,2,$QR_MAGNIFICATION")
         body.append("^FD${QR_ERROR_CORRECTION}A,${escape(qrPayload)}^FS")
 
-        val labelLength = maxOf(y + MARGIN_DOTS, scanY + QR_SIZE_DOTS + MARGIN_DOTS)
+        // The quiet zone is part of the symbol's footprint even though it is
+        // not part of its 10mm, so it counts towards how far down the media the
+        // ink actually reaches.
+        val qrBottom = blockTop + QR_SIZE_DOTS + QR_QUIET_ZONE_DOTS
+        val labelLength = maxOf(inkBottom, qrBottom) + MARGIN_DOTS
 
         return buildString {
             append("~SD$DARKNESS")
             append("^XA")
             append("^CI28")
+            append(MEDIA_TRACKING)
             append("^PW$PRINT_WIDTH_DOTS")
             append("^LL$labelLength")
             append("^LH0,0")

@@ -96,8 +96,9 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
             send(mac, zpl)
         }
 
+    // ConfirmedScan.scanCode is still carried - the backend's /print call needs
+    // it - but it is not printed. It travels inside the QR payload instead.
     private fun buildZpl(scan: ConfirmedScan): String = ZplBuilder.label(
-        scanCode = scan.scanCode,
         rows = ROW_ORDER.mapNotNull { (key, label) ->
             scan.fields[key]?.takeIf { it.isNotBlank() }?.let { ZplBuilder.Row(label, it) }
         },
@@ -107,8 +108,9 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
     private fun send(mac: String, zpl: String): PrintResult {
         var connection: Connection? = null
         return try {
-            connection = BluetoothConnection(mac)
-            connection.open()
+            // Retries a failed connect once; see PrinterConnect for why, and
+            // for why the retry stops at the connection.
+            connection = PrinterConnect.open(mac) { BluetoothConnection(it) }
 
             val status = ZebraPrinterFactory.getInstance(connection).currentStatus
             describeBlockingStatus(status)?.let { message ->
@@ -126,7 +128,11 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
             Log.d(TAG, "Sent ${zpl.length} bytes to $mac")
             PrintResult.Success
         } catch (e: ConnectionException) {
-            Log.e(TAG, "Print failed to $mac", e)
+            // Reaching here means every attempt failed, so the advice is now
+            // worth giving. Before the retry existed this same message was
+            // shown for a single transient failure, and sent operators to check
+            // a printer that was on, paired and in range.
+            Log.e(TAG, "Print failed to $mac after ${PrinterConnect.ATTEMPTS} attempts", e)
             PrintResult.Failure(
                 PrintResult.Reason.CONNECT_FAILED,
                 "Could not reach the printer. Check it is on, paired and in range.",
