@@ -92,9 +92,10 @@ logs/
 # ---------------------------------------------------------------------------
 # Sample data
 #
-# Directory structure and ground-truth JSON/CSV ARE tracked.
-# The image binaries are NOT — they are large and may contain
-# customer/product data. Fetch them via scripts/fetch_sample_data.py.
+# Directory structure and ground-truth JSON ARE tracked.
+# The image binaries are NOT — they are large and carry real product data.
+# Captures are taken on the TC22 through the app's own sample mode; there is
+# no download step and no public dataset (CLAUDE.md section 25).
 # ---------------------------------------------------------------------------
 sample_data/**/*.jpg
 sample_data/**/*.jpeg
@@ -106,7 +107,6 @@ sample_data/**/*.webp
 sample_data/**/*.zip
 sample_data/**/*.tar.gz
 !sample_data/**/.gitkeep
-!sample_data/**/expected.json
 !sample_data/**/README.md
 
 # Downloaded third-party datasets

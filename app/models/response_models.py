@@ -151,11 +151,3 @@ class HealthResponse(BaseModel):
     recognition_model: str | None = Field(default=None, alias="recognitionModel")
 
     model_config = {"populate_by_name": True}
-
-
-class ErrorResponse(BaseModel):
-    """Safe, user-facing error body. Never leaks internals (section 22)."""
-
-    status: str = "ERROR"
-    code: str
-    message: str

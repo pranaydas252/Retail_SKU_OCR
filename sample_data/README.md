@@ -1,61 +1,68 @@
 # Sample Data
 
-Test images for the OCR pipeline. **Image binaries are git-ignored** — only this file, the folder structure, and `expected.json` ground truth are tracked.
+Real D-Mart SKU label images and their ground truth. **Image binaries are
+git-ignored** — only this file, the folder structure, and the ground-truth JSON
+are tracked.
 
 ## Approach: zero-shot
 
-PaddleOCR is used **zero-shot**. No fine-tuning, no training data, no curated public datasets.
+PaddleOCR is used **zero-shot**. No fine-tuning, no training data, no curated
+public datasets (`CLAUDE.md` section 25).
 
-PP-OCRv5 is already a strong general recognizer. The variable in this project is the extraction and normalization logic layered on top of it, not the OCR model. Building dataset machinery before knowing where PaddleOCR actually fails would be effort spent on the wrong layer.
+PP-OCRv5 is already a strong general recognizer. The variable in this project is
+the extraction and normalization logic layered on top of it, not the OCR model.
+So this directory holds one thing: real label images shot on the TC22, plus
+their transcribed ground truth.
 
-So this directory holds one thing: **real D-Mart SKU label images shot on the TC22**, plus their ground truth.
+## The two corpora
 
-Until those exist there is no accuracy gate to run. Extraction logic is built and unit-tested against hand-written token fixtures in `tests/`; the accuracy number arrives with the images.
+| File | Images | What it is |
+| --- | --- | --- |
+| `roi_labels.json` | 15, in `roi/` | **The one that counts.** ROI crops taken through the app itself, which is exactly what the backend receives. |
+| `real_labels.json` | 9, in `real/` | Full-frame photographs, from before the app existed. Harder and unrepresentative — the app crops to the ROI window before uploading. Kept because the transcription is hand work that cannot be regenerated cheaply. |
+
+Both were originally kept under `images/`, which is the **runtime scan output
+directory**: git-ignored, written to by every scan, and safe to delete. An
+evaluation corpus living there is one cleanup away from being lost, so it lives
+here instead.
+
+Run the accuracy gate against either:
+
+```bat
+python scripts\measure_accuracy.py
+python scripts\measure_accuracy.py --truth sample_data\real_labels.json
+```
+
+## Ground-truth conventions
+
+Both files use the same rules, and they are what makes the numbers mean
+anything:
+
+- A **value** means the pack prints it, recorded in the normalized form the
+  server should produce — `YYYY-MM` for month/year, `YYYY-MM-DD` for full dates,
+  plain decimal for money.
+- **`null`** means the field is genuinely absent from the pack. A `null` the
+  extractor "finds" is a **false accept**, the most serious failure class in this
+  project. A wrong expiry date is worse than a recapture request.
+- An **omitted key** means the capture is not legible enough to assert a truth.
+  Not scored either way, so a guess is neither rewarded nor punished.
+- Transcribe exactly what is printed, including any character the OCR is likely
+  to confuse. The ground truth is the arbiter of `O/0`, `I/1`, `S/5`, `B/8`,
+  `G/6`, `Z/2` disputes.
 
 ## Buckets
 
-Per `CLAUDE.md` section 25:
+The condition buckets from `CLAUDE.md` section 25 — `good/`, `low_light/`,
+`blur/`, `glare/`, `curved_packaging/`, `rotated/` — are still here and still
+empty. Per-bucket accuracy is the right way to report, and a pipeline that
+scores well on `good/` and collapses on `glare/` is not ready.
 
-```text
-sample_data/
-├── good/                 # Clean, well-lit, flat labels — the baseline
-├── low_light/            # Underexposed
-├── blur/                 # Motion or focus blur
-├── glare/                # Specular highlights, reflective film
-├── curved_packaging/     # Bottles, pouches, cylindrical packs
-└── rotated/              # Off-axis, upside-down, skewed
-```
-
-Accuracy is reported **per bucket**. A pipeline that scores well on `good/` and collapses on `glare/` is not ready.
-
-Aim for a spread across buckets rather than volume. Twenty images per bucket that genuinely exhibit the condition beat two hundred near-duplicates of the easy case.
-
-## Ground truth
-
-Each bucket carries an `expected.json`:
-
-```json
-[
-  {
-    "image": "sku_001.jpg",
-    "expected": {
-      "batchNumber": "A23C91",
-      "manufacturingDate": "2026-07",
-      "expiryDate": "2028-06",
-      "lotCode": "K18P2",
-      "mrp": "245.00"
-    }
-  }
-]
-```
-
-Rules:
-
-- Use `null` for a field genuinely absent from the label. **Do not guess.**
-- A field marked `null` that the extractor "finds" is a **false accept** — the most serious failure class in this project. A wrong expiry date is worse than a recapture request.
-- Dates are recorded in the normalized form the server should produce: `YYYY-MM` for month/year, `YYYY-MM-DD` for full dates.
-- Transcribe exactly what is printed, including any character the OCR is likely to confuse. The ground truth is the arbiter of `O/0`, `I/1`, `S/5`, `B/8`, `G/6`, `Z/2` disputes.
+They stayed empty because the first real captures arrived as one undifferentiated
+set, and 15 images do not divide into six buckets usefully. Sorting them is worth
+doing when the corpus grows; doing it now would produce buckets of two.
 
 ## Capture guidance
 
-Shoot on the **TC22**, not a phone. Device optics, working distance, and in-store lighting all shift the input distribution, and results from another camera will not transfer.
+Shoot on the **TC22**, not a phone, through the app's own sample mode. Device
+optics, working distance, and in-store lighting all shift the input
+distribution, and results from another camera will not transfer.

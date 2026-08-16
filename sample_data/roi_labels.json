@@ -19,7 +19,7 @@
   ],
   "images": [
     {
-      "image": "images/SAMPLE_20260815_153748_820.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_153748_820.jpg",
       "note": "RSH sachet. Labelled. Sample product, so no MRP exists.",
       "expected": {
         "manufacturingDate": "2026-04",
@@ -28,7 +28,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_153851_143.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_153851_143.jpg",
       "note": "Can top, unlabelled inkjet stamp. Per-gram price present.",
       "expected": {
         "manufacturingDate": "2026-04-17",
@@ -37,7 +37,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154033_032.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154033_032.jpg",
       "note": "MyFitness jar. Fully labelled.",
       "expected": {
         "batchNumber": "TS/182/26",
@@ -47,7 +47,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154048_035.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154048_035.jpg",
       "note": "Yellow carton. Labels in one row, values in the row beneath.",
       "expected": {
         "batchNumber": "ABD L4",
@@ -57,7 +57,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154128_469.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154128_469.jpg",
       "note": "Bottle. Expiry stated as a shelf life, not a date.",
       "expected": {
         "batchNumber": "A-DS-194-26",
@@ -66,7 +66,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154222_163.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154222_163.jpg",
       "note": "Orange pouch. Lot rather than batch. Per-gram price beside MRP.",
       "expected": {
         "lotCode": "K11016A1",
@@ -76,7 +76,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154250_707.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154250_707.jpg",
       "note": "Green pack, unlabelled stamp: price, per-gram, two dates, code.",
       "expected": {
         "manufacturingDate": "2026-06-22",
@@ -85,7 +85,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154304_075.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154304_075.jpg",
       "note": "Labelled. Batch printed with an internal space.",
       "expected": {
         "batchNumber": "B2605 15",
@@ -95,7 +95,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154330_158.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154330_158.jpg",
       "note": "Labelled, hyphenated dates.",
       "expected": {
         "batchNumber": "014JE",
@@ -105,7 +105,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154343_233.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154343_233.jpg",
       "note": "Labelled, named months.",
       "expected": {
         "batchNumber": "J100",
@@ -115,7 +115,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154438_794.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154438_794.jpg",
       "note": "Labelled. Manufacturing stamp carries a time as well as a date.",
       "expected": {
         "batchNumber": "GH50040 M05",
@@ -125,7 +125,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154451_945.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154451_945.jpg",
       "note": "Stamp printed over pack artwork, partially obscured.",
       "expected": {
         "manufacturingDate": "2026-05-24",
@@ -134,7 +134,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154517_559.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154517_559.jpg",
       "note": "Unlabelled apart from M. and B. prefixes on the dates.",
       "expected": {
         "manufacturingDate": "2026-12-06",
@@ -143,7 +143,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154552_298.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154552_298.jpg",
       "note": "Unlabelled stamp on artwork. Price line clipped by the ROI window.",
       "expected": {
         "manufacturingDate": "2026-03-05",
@@ -151,7 +151,7 @@
       }
     },
     {
-      "image": "images/SAMPLE_20260815_154613_430.jpg",
+      "image": "sample_data/roi/SAMPLE_20260815_154613_430.jpg",
       "note": "Unlabelled stamp: price, per-gram, code, two dates, time.",
       "expected": {
         "manufacturingDate": "2025-10-08",

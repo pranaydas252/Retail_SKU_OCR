@@ -37,10 +37,6 @@ class ValidationResult:
     def is_valid(self, field: str) -> bool:
         return not self.field_notes.get(field)
 
-    @property
-    def has_problems(self) -> bool:
-        return bool(self.field_notes) or not self.consistency_ok
-
 
 def _parse_iso(value: str) -> tuple[int, int, int | None] | None:
     if _ISO_DAY.match(value):
