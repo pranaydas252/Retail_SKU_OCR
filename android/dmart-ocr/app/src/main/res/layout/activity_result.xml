@@ -192,7 +192,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/retakeButton"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.DmartOcr.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="58dp"
             android:layout_marginEnd="12dp"

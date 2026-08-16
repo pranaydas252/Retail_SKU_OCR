@@ -93,7 +93,7 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/testPrintButton"
-        style="@style/Widget.Material3.Button.OutlinedButton"
+        style="@style/Widget.DmartOcr.Button.Outlined"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:layout_marginTop="16dp"
