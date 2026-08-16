@@ -43,11 +43,16 @@
     <!-- Camera overlay -->
     <color name="scrim">#A6000000</color>
     <color name="roi_stroke">#00A7E8</color>
-    <!-- Framing quality bands. Amber is deliberately distinct from both, since
-         it carries the only actionable message: nearly there, keep going. -->
+    <!-- Framing quality bands, as a traffic light. Amber is deliberately
+         distinct from both ends, since it carries the only actionable message:
+         nearly there, keep going.
+
+         Poor is red rather than the brand blue: the shutter is disabled in this
+         state, and blue reads as "idle" rather than "not ready", which leaves
+         the operator wondering why the button does nothing. -->
     <color name="roi_good">#22C55E</color>
     <color name="roi_fair">#F59E0B</color>
-    <color name="roi_poor">#00A7E8</color>
+    <color name="roi_poor">#EF4444</color>
 
     <color name="ripple_on_brand">#33FFFFFF</color>
 

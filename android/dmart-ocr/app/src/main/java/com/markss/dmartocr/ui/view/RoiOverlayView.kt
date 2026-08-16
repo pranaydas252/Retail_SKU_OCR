@@ -65,7 +65,10 @@ class RoiOverlayView @JvmOverloads constructor(
 
     private val cornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        color = ContextCompat.getColor(context, R.color.roi_stroke)
+        // Starts in the poor state, which is what it is before any frame has
+        // been analysed. Opening on the brand blue and then snapping to red a
+        // moment later reads as a fault rather than as a starting point.
+        color = ContextCompat.getColor(context, R.color.roi_poor)
         strokeWidth = this@RoiOverlayView.strokeWidth
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
