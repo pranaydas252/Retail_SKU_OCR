@@ -37,6 +37,7 @@ The **backend lives at the repository root**. The Android project lives in `andr
 | --- | --- |
 | Device | Zebra TC22 **only** — EMDK device gate; CameraX for capture; no DataWedge |
 | App | Kotlin + XML views, Material 3, light theme only — **no Compose** |
+| Capture gate | ML Kit text recognition (bundled) on the preview stream — scores framing, skew and text presence at ~250 ms, and deskews the crop. Not used to extract fields |
 | Transport | HTTPS REST, multipart image upload |
 | Server | Python 3.12, FastAPI, Uvicorn behind IIS |
 | Preprocessing | OpenCV |
@@ -120,6 +121,7 @@ python -m pytest tests -q
 | `GET` | `/api/v1/health` | Liveness and OCR readiness. Unauthenticated so IIS can probe it. |
 | `POST` | `/api/v1/scans` | Upload a label image; returns extracted fields, tokens, and timings. |
 | `POST` | `/api/v1/scans/{scanId}/confirm` | Persist operator-confirmed values; returns the QR payload. |
+| `POST` | `/api/v1/scans/{scanId}/print` | Record that a label was printed; returns the QR payload. Called *after* the printer reports success. |
 | `GET` | `/api/v1/scans/{scanId}` | Read a stored scan back, including operator edits. |
 
 ## Status
@@ -131,10 +133,19 @@ python -m pytest tests -q
 | 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
 | 3 — SQL Server persistence, confirm/fetch endpoints | Done |
 | 4 — Android app (Kotlin + XML) | Done — built and verified on a real TC22 |
-| 5 — ZQ320 printing | Not started |
+| 5 — ZQ320 printing | Code complete; **never confirmed against a physical printer** |
 | 6 — IIS deployment | Not started |
 
-Measured on the reference machine: a 10-region label completes in ~4.0 s end to end. Latency scales with the **number of detected text regions**, not image size. See `PLAN.md` section 1c.
+Accuracy on the 15 ROI captures in `sample_data/roi/`, reported in the two tiers of `CLAUDE.md` section 24:
+
+| Tier | Fields | Score |
+| --- | --- | --- |
+| Core | MRP, manufacturing date, expiry date | **43%** |
+| Codes | Batch number, lot code | **38%** |
+
+Both are far short of the 95% core target. Recognition, not extraction, is the remaining ceiling — see `PLAN.md`.
+
+Latency scales with the **number of detected text regions**, not image size: 4.6 s per ROI crop on the reference machine, and a full pack shot is much worse. This is why the app crops to the ROI window before uploading.
 
 ---
 
@@ -149,6 +160,36 @@ Open in Android Studio. Requires JDK 17. Gradle wrapper is committed — no syst
 The Zebra ZSDK (Link-OS) AAR is not on Maven Central. Place it in `android/dmart-ocr/app/libs/` — it is git-ignored.
 
 Set the backend base URL and API key in `local.properties` or via build config. Never hard-code them.
+
+### Connecting the TC22 to the backend
+
+Three things have to line up, and the failure looks identical for all three — the app reports a network error and says nothing about which one:
+
+1. **Bind to all interfaces.** `--host 0.0.0.0`, as above. The default binds loopback only, which no device can reach.
+
+2. **Use the LAN address, never `localhost`.** On the TC22, `localhost` is the TC22. Find the server's address and put it in the app's settings dialog, or in `local.properties` as the build default:
+
+   ```powershell
+   Get-NetIPAddress -AddressFamily IPv4 |
+     Where-Object { $_.InterfaceAlias -notmatch 'Loopback' } |
+     Select-Object InterfaceAlias, IPAddress
+   ```
+
+   Pick the Wi-Fi adapter's address — the TC22 is on Wi-Fi, so a wired or virtual adapter's address will not route. It is DHCP-assigned and moves; re-check it after a network change.
+
+3. **Open the port inbound.** Windows Firewall blocks 8000 by default. From an **elevated** prompt:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "D-Mart OCR backend" `
+     -Direction Inbound -Protocol TCP -LocalPort 8000 `
+     -Action Allow -Profile Private
+   ```
+
+   `-Profile Private` only. Do not open this on a public network.
+
+   Curling the server's own LAN address from the server does **not** test this — Windows treats that as local traffic and skips the inbound rule entirely. The only real check is from the device.
+
+Debug builds allow cleartext HTTP so a laptop-hosted backend works before HTTPS exists. Release builds do not — see `CLAUDE.md` section 19.
 
 ---
 

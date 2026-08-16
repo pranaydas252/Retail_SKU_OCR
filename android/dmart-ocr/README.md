@@ -2,7 +2,13 @@
 
 Kotlin + XML views. **No Jetpack Compose.** Light theme only.
 
-Targets the Zebra TC22. Capture is CameraX; EMDK is used for the device gate only; ZSDK will handle ZQ320 printing in Phase 5.
+Targets the Zebra TC22. Capture is CameraX; EMDK is used for the device gate
+only; ZSDK drives ZQ320 printing over Bluetooth.
+
+ML Kit text recognition runs on the preview stream — not to extract fields, but
+to score framing, skew and text presence in ~250 ms, gate the shutter behind a
+colour-coded readiness signal, and deskew the crop before upload. Field
+extraction stays on the server (CLAUDE.md §3).
 
 ---
 
@@ -26,7 +32,16 @@ dmart.backendUrl=http://10.0.2.2:8000/
 dmart.apiKey=
 ```
 
-`10.0.2.2` is the emulator's route to the host. On a real TC22 use the server's LAN address, e.g. `http://192.168.1.50:8000/`.
+`10.0.2.2` is the emulator's route to the host. On a real TC22 use the server's
+LAN address, e.g. `http://192.168.1.50:8000/` — `localhost` on the TC22 is the
+TC22. The address is only a build-time default; the operator can change it in
+the app's settings dialog without a rebuild, which is the intended path for a
+DHCP address that moves.
+
+Two server-side steps have to match, or the app reports a network error that
+says nothing about the cause: uvicorn must bind `--host 0.0.0.0`, and Windows
+Firewall must allow inbound TCP 8000. Both are written out in the root
+[README](../../README.md#connecting-the-tc22-to-the-backend).
 
 No URL, key, or path is hard-coded in source (CLAUDE.md §19).
 
@@ -37,10 +52,14 @@ No URL, key, or path is hard-coded in source (CLAUDE.md §19).
 | Screen | Purpose |
 | --- | --- |
 | `MainActivity` | Home. Brand, device-gate state, server state, one action. |
-| `ScanActivity` | CameraX preview with the fixed ROI window; crops and uploads. |
-| `ResultActivity` | Confirm/edit extracted values, then commit. |
+| `ScanActivity` | CameraX preview with the fixed ROI window; scores framing, crops, deskews, uploads. |
+| `ResultActivity` | Confirm/edit extracted values, then commit and print. |
+| `SettingsDialog` | Server address, printer MAC, sample-collection mode, test print. A dialog, not a screen. |
 
-There is no login, onboarding, or settings screen.
+There is no login and no onboarding. Settings is a dialog because there are
+three values, they are set once per device at install time, and a whole screen
+for them would add a navigation destination to an app that deliberately has
+almost none.
 
 `ResultActivity` is part of the scan flow rather than a navigation destination: §27 of the specification requires the operator to review, edit, and confirm before anything is committed, so the flow cannot end at the camera.
 
