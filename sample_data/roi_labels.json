@@ -1,0 +1,231 @@
+{
+  "_readme": [
+    "Ground truth for ROI-cropped captures taken through the app itself.",
+    "",
+    "This is the input the backend actually receives: the app gates capture on",
+    "a readiness score, crops to the ROI window and deskews before uploading.",
+    "",
+    "Conventions:",
+    "  value   - the pack prints this field and it reads exactly this, already",
+    "            in the normalized form the server should produce (YYYY-MM or",
+    "            YYYY-MM-DD for dates, plain decimal for money).",
+    "  null    - the field is genuinely ABSENT from the pack. Extracting",
+    "            anything here is a false accept, the worst failure class in",
+    "            this project (CLAUDE.md section 24).",
+    "  omitted - not legible enough in the capture to assert a truth. Not",
+    "            scored either way, so a guess is neither rewarded nor",
+    "            punished.",
+    "",
+    "Transcribe exactly what is printed, including any character the OCR is",
+    "likely to confuse. This file is the arbiter of O/0, I/1, S/5, B/8, G/6",
+    "and Z/2 disputes.",
+    "",
+    "On packs with a bare stamp and no field names: batch number and",
+    "manufacturing date are always present, and of two dates the earlier is",
+    "manufacture. A HH:MM value is a clock time, not a date.",
+    "",
+    "Transcribed 2026-08-16 by reading each capture directly, not from OCR",
+    "output \u2014 scoring an engine against its own reading measures nothing.",
+    "",
+    "Two expiry dates are DERIVED and are recorded as truth deliberately:",
+    "index 05 prints 'BEST BEFORE 24 MONTHS FROM MANUFACTURE' and index 19",
+    "prints 'Best before 5 yrs from Mfg. Month & Year'. Section 8 allows",
+    "deriving those from the printed manufacturing date, so a pipeline that",
+    "does it correctly should be credited."
+  ],
+  "images": [
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195410_770.jpg",
+      "expected": {
+        "batchNumber": "GSB0134",
+        "manufacturingDate": "2024-11",
+        "expiryDate": "2026-10",
+        "lotCode": null,
+        "mrp": "232.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195420_677.jpg",
+      "expected": {
+        "batchNumber": "S26L289A",
+        "manufacturingDate": "2026-05",
+        "expiryDate": "2028-04",
+        "lotCode": null,
+        "mrp": "60.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195427_963.jpg",
+      "expected": {
+        "batchNumber": "BH066B17",
+        "manufacturingDate": "2026-02",
+        "expiryDate": "2028-01",
+        "lotCode": null,
+        "mrp": "680.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195448_284.jpg",
+      "expected": {
+        "batchNumber": "MN2605121",
+        "manufacturingDate": "2026-05",
+        "expiryDate": null,
+        "lotCode": null,
+        "mrp": null
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195458_573.jpg",
+      "expected": {
+        "batchNumber": "R25066",
+        "manufacturingDate": "2025-06",
+        "expiryDate": "2029-05",
+        "lotCode": null,
+        "mrp": "98.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195556_495.jpg",
+      "expected": {
+        "batchNumber": "A-DS-194-26",
+        "manufacturingDate": "2026-05",
+        "expiryDate": "2028-05",
+        "lotCode": null,
+        "mrp": "250.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195631_888.jpg",
+      "expected": {
+        "batchNumber": "RC-DS5720",
+        "manufacturingDate": "2025-07",
+        "expiryDate": null,
+        "lotCode": null,
+        "mrp": "30.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195713_716.jpg",
+      "expected": {
+        "batchNumber": "TS/182/26",
+        "manufacturingDate": "2026-06-03",
+        "expiryDate": "2028-06-02",
+        "lotCode": null,
+        "mrp": "319.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195750_674.jpg",
+      "expected": {
+        "manufacturingDate": "2026-04-17",
+        "expiryDate": "2027-01-16",
+        "lotCode": null,
+        "mrp": "239.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195846_975.jpg",
+      "expected": {
+        "batchNumber": "BCM2500053",
+        "manufacturingDate": "2025-08-05",
+        "expiryDate": "2027-02-04",
+        "lotCode": null,
+        "mrp": "210.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195901_175.jpg",
+      "expected": {
+        "batchNumber": "BADBF4023",
+        "manufacturingDate": "2026-04",
+        "expiryDate": "2029-03",
+        "lotCode": null,
+        "mrp": null
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195914_873.jpg",
+      "expected": {
+        "batchNumber": null,
+        "manufacturingDate": "2026-06-16",
+        "expiryDate": "2027-01-16",
+        "lotCode": "K11016A1",
+        "mrp": "45.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195926_575.jpg",
+      "expected": {
+        "batchNumber": "B260515",
+        "manufacturingDate": "2026-05-15",
+        "expiryDate": "2027-05-14",
+        "lotCode": null,
+        "mrp": "70.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_195938_023.jpg",
+      "expected": {
+        "batchNumber": "J100",
+        "manufacturingDate": "2025-09-16",
+        "expiryDate": "2026-03-15",
+        "lotCode": null,
+        "mrp": "99.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200039_098.jpg",
+      "expected": {
+        "batchNumber": "SB3114C",
+        "manufacturingDate": "2025-10-08",
+        "expiryDate": "2026-10-07",
+        "lotCode": null,
+        "mrp": "190.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200103_706.jpg",
+      "expected": {
+        "batchNumber": "014JE",
+        "manufacturingDate": "2025-10-11",
+        "expiryDate": "2027-01-10",
+        "lotCode": null,
+        "mrp": "23.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200134_319.jpg",
+      "expected": {
+        "batchNumber": "GH50040M05",
+        "manufacturingDate": "2025-11-13",
+        "expiryDate": "2026-08-12",
+        "lotCode": null,
+        "mrp": "89.00"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200214_286.jpg",
+      "expected": {
+        "batchNumber": "R11250618",
+        "manufacturingDate": "2025-11",
+        "expiryDate": "2027-10-31",
+        "lotCode": null,
+        "mrp": "1012.50"
+      }
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200322_734.jpg",
+      "expected": {}
+    },
+    {
+      "image": "sample_data/roi/SAMPLE_20260816_200334_973.jpg",
+      "expected": {
+        "batchNumber": null,
+        "manufacturingDate": "2025-01",
+        "expiryDate": "2030-01",
+        "lotCode": null,
+        "mrp": "42.00"
+      }
+    }
+  ]
+}
