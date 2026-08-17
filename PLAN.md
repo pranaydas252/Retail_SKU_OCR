@@ -649,6 +649,37 @@ resolution**, not the whole image at `vlm_max_side`. That directly addresses F1
 — the downscale I chose on latency grounds and never checked for accuracy — and
 replaces one 100s whole-image pass with a few small ones.
 
+### Both engines, always — first real-hardware result 2026-08-17
+
+`vlm_trigger` moved from `fallback` to `always` on a measured argument: the
+fallback fired when PP-OCRv5 found FEW fields and stayed silent when it found
+WRONG ones, and **57% of PP-OCRv5's wrong values sat on scans it scored 3/3**.
+It optimised coverage when the harder problem is correctness.
+
+The first contested scan on real hardware bore that out exactly. Every field
+correct, and **batch number came back as two options — the VLM's was right**.
+Under `fallback` that pack would have scored its core fields, the VLM would
+never have run, and the operator would have been shown the wrong batch alone
+with nothing to compare it against.
+
+Two consequences already handled:
+
+- **The client gave up before the server did.** Read timeout was 90s, sized
+  when PP-OCRv5 alone took 6s; two engines take 95–160s. The app reported
+  "could not reach the server" for a scan the server had received, processed
+  and saved. Now 330s, the rule being that the client must never time out
+  before the server's own `vlm_timeout_seconds`.
+- **Contests are now persisted.** `SkuScanField` gains `Engines` and
+  `ConflictValue`, and `dbo.ContestedFields` reports which reading the operator
+  kept. The merge keeps the primary for predictability rather than because it
+  is more often right; this is the evidence that can make that a measurement
+  instead of an assumption, possibly per field. Run
+  `sql/migrations/001_field_engines.sql` against an existing database.
+
+Open: whether contested cards become noise. With the VLM answering every field
+it will disagree with correct PP-OCRv5 reads too, and if a chip pair appears on
+nearly every field the operator will stop reading them.
+
 ### Closed during this cycle
 
 - Deskew direction verified on device by the user.

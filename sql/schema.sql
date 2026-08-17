@@ -100,6 +100,18 @@ BEGIN
         ConfirmedValue      NVARCHAR(256)       NULL,
         Confidence          DECIMAL(5, 4)       NULL,
         Source              NVARCHAR(32)        NULL,
+        -- Which engines produced a value for this field: "OCR", "VLM", or both.
+        Engines             NVARCHAR(32)        NULL,
+        -- What the OTHER engine read, when the two disagreed.
+        --
+        -- Kept because the operator's confirmed value settles which engine was
+        -- right, and that is the only evidence there is for a question the
+        -- merge currently answers by convention: it keeps the primary, not
+        -- because PP-OCRv5 is more often correct, but so the result stays
+        -- predictable. On the first real contested scan the VLM was right.
+        -- Enough of these and the default becomes a measured choice rather
+        -- than an assumption, possibly per field.
+        ConflictValue       NVARCHAR(256)       NULL,
         WasEdited           BIT                 NOT NULL CONSTRAINT DF_SkuScanField_WasEdited DEFAULT 0,
         ValidationNote      NVARCHAR(512)       NULL,
         CreatedAt           DATETIME2(3)        NOT NULL CONSTRAINT DF_SkuScanField_CreatedAt DEFAULT SYSUTCDATETIME(),

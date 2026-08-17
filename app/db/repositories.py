@@ -101,15 +101,21 @@ def save_scan(
                 )
 
                 for name, field in fields.items():
+                    # Engines and the losing value are stored alongside the
+                    # winner. The operator's later confirmation settles which
+                    # engine was right, and that pairing is the only evidence
+                    # for whether "primary wins a contest" is the correct
+                    # default or merely the predictable one.
                     cursor.execute(
                         """
                         INSERT INTO dbo.SkuScanField
                             (ScanId, FieldName, RawValue, NormalizedValue,
-                             Confidence, Source)
-                        VALUES (?, ?, ?, ?, ?, ?);
+                             Confidence, Source, Engines, ConflictValue)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                         """,
                         scan_id, name, field.raw_value, field.value,
                         field.confidence, field.source,
+                        ",".join(field.engines) or None, field.conflict_value,
                     )
 
                 for index, token in enumerate(tokens):
