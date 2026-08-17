@@ -88,8 +88,21 @@ were tried and none read them. `scripts/extraction_headroom.py` puts the whole
 engine's ceiling at **66%** even with a perfect extractor, against the 95% target
 in section 24.
 
-`qwen2.5vl:3b` reads that stamp. It runs **locally on CPU through Ollama** — no
-cloud, no GPU, no cost, which keeps the constraints of this section intact.
+The engine is a small Qwen vision-language model run **locally on CPU through
+Ollama** — no cloud, no GPU, no cost, which keeps the constraints of this
+section intact.
+
+**Correction, 2026-08-17.** This section previously claimed `qwen2.5vl:3b`
+"reads that stamp". It does not. Checked against hand-transcribed ground truth
+it returned mfg `2023-04`, exp `2025-01` and batch `526L289A` where the pack
+prints `2026-05`, `2028-04` and `S26L289A`. The original claim came from
+comparing its output to PP-OCRv5's garbage rather than to the pack. Under
+section 24 a confidently wrong value is worse than a missing one, so this is a
+reason to change engine rather than to tune around it.
+
+The current model is therefore **`qwen3-vl:4b`**, a generation newer and
+unmeasured on this corpus. Whether it is better is an open question, not a
+claim — see `PLAN.md` F1.
 
 Rules that still apply:
 

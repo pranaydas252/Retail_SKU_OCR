@@ -6,8 +6,8 @@ matter how they are tuned. This measures whether a vision model closes that
 gap on CPU, using the same ground truth and the same scoring as
 measure_accuracy.py so the numbers are directly comparable.
 
-    python scripts/vlm_bakeoff.py --model qwen2.5vl:3b
-    python scripts/vlm_bakeoff.py --model qwen2.5vl:3b --limit 5
+    python scripts/vlm_bakeoff.py --model qwen3-vl:4b
+    python scripts/vlm_bakeoff.py --model qwen3-vl:4b --limit 5
 
 Latency is reported per image and is the thing to watch: on CPU a vision model
 is seconds to minutes, against roughly 4s for the current pipeline.
@@ -307,7 +307,8 @@ def key(value) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="qwen2.5vl:3b")
+    parser.add_argument("--model", default=None,
+                        help="defaults to the configured vlm_model")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--max-side", type=int, default=MAX_SIDE,
@@ -319,6 +320,13 @@ def main() -> int:
                         help="read the JSON-mode prompt from this file")
     parser.add_argument("--json", help="write raw model output here")
     args = parser.parse_args()
+
+    # Default to whatever the server is configured to run, so a bake-off never
+    # silently measures a model the application has moved off.
+    if args.model is None:
+        from app.config import get_settings
+
+        args.model = get_settings().vlm_model
 
     prompt = (
         args.prompt_file.read_text(encoding="utf-8") if args.prompt_file else PROMPT

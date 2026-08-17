@@ -158,18 +158,31 @@ class Settings(BaseSettings):
     # (MRP, manufacturing date, expiry date) extracted. Two of three is a pack
     # that mostly worked; one or none is the case worth two minutes of model.
     vlm_fallback_below_core_fields: int = 2
-    # qwen2.5vl:3b, chosen on measurement rather than on name.
+    # qwen3-vl:4b, replacing qwen2.5vl:3b on 2026-08-17.
+    #
+    # The 2.5 generation was chosen on measurement, and then measurement caught
+    # it out: on the Eno carton it returned mfg 2023-04 and exp 2025-01 against
+    # a truth of 2026-05 and 2028-04, and batch 526L289A against S26L289A. A
+    # confidently wrong value is the worst failure class this project has
+    # (section 24), so a plausible-looking misread is a reason to replace the
+    # engine, not to tune around it.
     #
     #   engine                        core   Eno inkjet stamp
-    #   qwen2.5vl:3b                   53%   read it
+    #   qwen2.5vl:3b                   53%   plausible, and wrong
     #   PaddleOCR-VL-1.5-GGUF          36%   two lines, then stopped
+    #   qwen3-vl:4b                     ?    to be measured
     #
     # The 53%/36% figures are from the previous corpus and the older extractor,
-    # so both will move when the new corpus lands; the ordering is what matters
-    # and it is consistent with the per-pack result. PaddleOCR-VL stays
-    # installed and configurable — it is five times faster, and if a future
-    # corpus says it is enough, that is a switch of one setting.
-    vlm_model: str = "qwen2.5vl:3b"
+    # so both will move when the new corpus lands. PaddleOCR-VL stays installed
+    # and configurable — it is five times faster, and if a future corpus says it
+    # is enough, that is a switch of one setting.
+    # NOT "qwen3-vl:4b". That tag is the Thinking variant: every token goes to
+    # the `thinking` field, `response` comes back empty, and it stops on
+    # `length` while still reasoning. `think: false` is ignored on both
+    # /api/generate and /api/chat — the chat template forces it. It spent
+    # 130-140s per image and never answered. The "-instruct" suffix is load
+    # bearing.
+    vlm_model: str = "qwen3-vl:4b-instruct"
     vlm_timeout_seconds: int = 300
 
     # How the model is asked, which is a property of the model and not a
