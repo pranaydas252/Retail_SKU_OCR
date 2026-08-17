@@ -14,6 +14,18 @@
 #   code      -> must be alphanumeric, and must not itself look like a label
 
 fields:
+  # Read from the pack's barcode by the device, never from the printed text.
+  #
+  # The empty alias list is deliberate and load bearing. A spec here gives the
+  # field a value type, so an operator-confirmed SKU normalizes and persists
+  # like any other field instead of being stored as an unrecognized string. But
+  # with no aliases the label matcher can never match it, so the extractor
+  # cannot invent an SKU from something that happens to sit near the word "SKU"
+  # on the packaging. The barcode is the only source.
+  skuCode:
+    value_type: code
+    aliases: []
+
   batchNumber:
     value_type: code
     aliases:

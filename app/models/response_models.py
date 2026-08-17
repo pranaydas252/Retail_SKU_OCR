@@ -28,6 +28,38 @@ class ProcessingStatus(str, Enum):
     PRINTED = "PRINTED"
 
 
+class FieldSource(str, Enum):
+    """Where a stored field value came from (CLAUDE.md section 16).
+
+    Provenance, not decoration. The audit trail exists so a wrong field can be
+    diagnosed after the fact, and these differ enormously in how much they can
+    be trusted: BARCODE either decoded or it did not, OCR_RULES is a reading
+    that may be wrong, DERIVED_RULE was computed rather than read at all.
+
+    Kept in step with the constants in the Android ApiModels.kt, which compares
+    them as literals — see tests/test_wire_contract.py.
+    """
+
+    #: Read by the rule extractor from recognised text.
+    OCR_RULES = "OCR_RULES"
+    #: Computed from another field and a rule printed on the pack, such as a
+    #: "best before N months" shelf life. Never read directly.
+    DERIVED_RULE = "DERIVED_RULE"
+    #: Decoded from the pack's barcode. The only source here that is not a
+    #: reading, and so the only one with nothing for an operator to check.
+    BARCODE = "BARCODE"
+    #: Typed or corrected by the operator at confirmation.
+    OPERATOR = "OPERATOR"
+    #: Extraction ran and found nothing.
+    NOT_FOUND = "NOT_FOUND"
+
+
+#: The one field that is decoded rather than recognised. Defined here so the
+#: persistence layer and the extractor agree on the name without importing each
+#: other; it must match the key in config/field_aliases.yaml.
+BARCODE_FIELD = "skuCode"
+
+
 class ConfidenceBand(str, Enum):
     """UI treatment bands from CLAUDE.md section 12.
 

@@ -246,8 +246,16 @@ class BluetoothLabelPrinter(private val context: Context) : LabelPrinter {
         )
         private const val DRAIN_PAUSE_MS = 250L
 
-        /** Printed rows, in label order (CLAUDE.md section 18). */
+        /**
+         * Printed rows, in label order (CLAUDE.md section 18).
+         *
+         * SKU leads. It is the only value on the label that was decoded rather
+         * than recognised, and the only one a downstream system can join on, so
+         * it belongs where a person scanning a shelf looks first. It takes the
+         * place the retailer's name used to occupy.
+         */
         private val ROW_ORDER = listOf(
+            "skuCode" to "SKU",
             "batchNumber" to "BATCH",
             "manufacturingDate" to "MFG",
             "expiryDate" to "EXP",

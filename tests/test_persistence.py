@@ -117,6 +117,7 @@ class TestQrPayload:
         payload = scan_service.build_qr_payload(
             "SCAN-000001",
             {
+                "skuCode": "8901234567890",
                 "batchNumber": "a23c91",
                 "manufacturingDate": "2026-07",
                 "expiryDate": "2028-06",
@@ -125,7 +126,21 @@ class TestQrPayload:
             },
         )
 
-        assert payload == "SCAN-000001|A23C91|2026-07|2028-06|K18P2|245.00"
+        # SKU leads: it is the only value in the payload that was decoded
+        # rather than recognised, and the only one a downstream system joins on.
+        assert payload == (
+            "8901234567890|SCAN-000001|A23C91|2026-07|2028-06|K18P2|245.00"
+        )
+
+    def test_a_skipped_barcode_leaves_the_sku_position_empty(self):
+        # The barcode step can be skipped, and a pack scanned without one must
+        # still print a payload a scanner can parse positionally.
+        payload = scan_service.build_qr_payload(
+            "SCAN-000002", {"batchNumber": "A23C91"}
+        )
+
+        assert payload.startswith("|SCAN-000002|")
+        assert payload.split("|")[0] == ""
 
     def test_missing_fields_keep_their_position(self):
         # A parser on the scanner side must not have to guess which field is
@@ -134,7 +149,9 @@ class TestQrPayload:
             "SCAN-000001", {"batchNumber": "A23C91", "mrp": "20.00"}
         )
 
-        assert payload.split("|") == ["SCAN-000001", "A23C91", "", "", "", "20.00"]
+        assert payload.split("|") == [
+            "", "SCAN-000001", "A23C91", "", "", "", "20.00",
+        ]
 
     def test_payload_fits_the_10mm_density_budget(self):
         # Section 17: QR version 5 at magnification 2, error correction M,
@@ -142,6 +159,7 @@ class TestQrPayload:
         payload = scan_service.build_qr_payload(
             "SCAN-999999",
             {
+                "skuCode": "8901234567890",
                 "batchNumber": "A23C91XYZ",
                 "manufacturingDate": "2026-07-25",
                 "expiryDate": "2028-06-30",
@@ -222,6 +240,7 @@ class TestQrPayloadAuthority:
         payload = scan_service.build_qr_payload(
             "SCAN-000047",
             {
+                "skuCode": "8901234567890",
                 "batchNumber": "A23C92",
                 "manufacturingDate": "2026-07",
                 "expiryDate": "2028-06",
@@ -230,5 +249,7 @@ class TestQrPayloadAuthority:
             },
         )
 
-        assert payload == "SCAN-000047|A23C92|2026-07|2028-06||245.00"
-        assert payload.split("|")[4] == "", "cleared lot code must stay blank"
+        assert payload == (
+            "8901234567890|SCAN-000047|A23C92|2026-07|2028-06||245.00"
+        )
+        assert payload.split("|")[5] == "", "cleared lot code must stay blank"

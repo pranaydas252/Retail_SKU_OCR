@@ -34,6 +34,12 @@
 
     <!-- Camera -->
     <string name="scan_instruction">Place the label inside this window</string>
+    <string name="field_sku">SKU</string>
+    <string name="scan_instruction_barcode">Point at the barcode</string>
+    <string name="scan_hint_barcode">Looking for the SKU barcode</string>
+    <string name="scan_skip_barcode">No barcode</string>
+    <string name="scan_sku_found">SKU %1$s</string>
+    <string name="scan_sku_skipped">No SKU — label only</string>
     <string name="scan_hint">Fill the frame and hold steady</string>
     <string name="captured_frame">Captured label</string>
     <!-- Live framing feedback from on-device text detection. Phrased as an

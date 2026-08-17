@@ -147,6 +147,48 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- Skip the barcode step.
+         Not every pack carries a readable barcode, and a scan that cannot start
+         is worse than a scan without an SKU. Sits beside the shutter, visible
+         only while the barcode step is running. -->
+    <TextView
+        android:id="@+id/skipBarcodeButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_camera_pill"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:text="@string/scan_skip_barcode"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textColor="@android:color/white"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/captureButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/captureButton"
+        app:layout_constraintTop_toTopOf="@id/captureButton"
+        tools:visibility="visible" />
+
+    <!-- SKU captured from the barcode, shown so the operator can see the step
+         succeeded before framing the label. -->
+    <TextView
+        android:id="@+id/skuChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_chip_high"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textColor="@android:color/white"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/captureButton"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:text="SKU 8901234567890"
+        tools:visibility="visible" />
+
     <!-- Processing overlay. Covers the whole screen so the operator cannot
          fire a second capture into a request already in flight. -->
     <FrameLayout

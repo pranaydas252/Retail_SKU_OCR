@@ -40,6 +40,7 @@ import com.markss.retailocr.data.SampleStore
 import com.markss.retailocr.data.ScanResponse
 import com.markss.retailocr.databinding.ActivityScanBinding
 import com.markss.retailocr.device.DeviceId
+import com.markss.retailocr.ocr.BarcodeAnalyzer
 import com.markss.retailocr.ocr.LabelAnalyzer
 import com.markss.retailocr.ocr.LabelQuality
 import com.markss.retailocr.ocr.ReadinessTracker
@@ -69,6 +70,28 @@ class ScanActivity : AppCompatActivity() {
     private var capturing = false
 
     private var analyzer: LabelAnalyzer? = null
+    private var barcodeAnalyzer: BarcodeAnalyzer? = null
+
+    /**
+     * What the operator is being asked to point at right now.
+     *
+     * The barcode comes first because it is the only value in the scan that is
+     * read rather than recognised — every OCR field is a guess the operator has
+     * to check, and a decoded barcode either resolves or it does not. It is
+     * also the field a downstream system can join on.
+     *
+     * On a carton the barcode and the date stamp are usually on different
+     * faces, so this is genuinely two aimed steps rather than one. That is why
+     * the barcode step can be skipped: a pack whose barcode is scuffed,
+     * wrapped around a curve, or simply absent must not become a pack that
+     * cannot be scanned at all.
+     */
+    private enum class Phase { BARCODE, LABEL }
+
+    private var phase = Phase.BARCODE
+
+    /** Decoded barcode, or null when the operator skipped the step. */
+    private var skuCode: String? = null
 
     /**
      * Last readiness reading from the preview analyzer.
@@ -112,6 +135,9 @@ class ScanActivity : AppCompatActivity() {
         binding.closeButton.setOnClickListener { finish() }
         binding.torchButton.setOnClickListener { toggleTorch() }
         binding.captureButton.setOnClickListener { capture() }
+        binding.skipBarcodeButton.setOnClickListener { enterLabelPhase(null) }
+
+        showBarcodePhase()
 
         if (AppPreferences.sampleMode) showSampleCount()
 
@@ -144,6 +170,7 @@ class ScanActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         analyzer?.close()
+        barcodeAnalyzer?.close()
         cameraExecutor.shutdown()
     }
 
@@ -240,8 +267,29 @@ class ScanActivity : AppCompatActivity() {
                         roiProvider = { roiFraction },
                         onResult = { runOnUiThread { onQuality(it) } },
                     )
+                    // Idle until the barcode step hands over. Text recognition
+                    // on frames aimed at a barcode is wasted work and, worse,
+                    // would seed the readiness smoothing with readings of the
+                    // wrong face of the pack.
+                    quality.enabled = false
                     analyzer = quality
-                    useCase.setAnalyzer(cameraExecutor, quality)
+
+                    val barcode = BarcodeAnalyzer(
+                        onBarcode = { value -> runOnUiThread { enterLabelPhase(value) } },
+                    )
+                    barcodeAnalyzer = barcode
+
+                    // One ImageAnalysis use case, two consumers, chosen by
+                    // phase. A second ImageAnalysis would be the obvious
+                    // alternative and is the wrong one: CameraX limits how many
+                    // use cases bind at once, and both analyzers want the same
+                    // frames at the same resolution anyway.
+                    useCase.setAnalyzer(cameraExecutor) { proxy ->
+                        when (phase) {
+                            Phase.BARCODE -> barcode.analyze(proxy)
+                            Phase.LABEL -> quality.analyze(proxy)
+                        }
+                    }
                 }
 
             val useCaseGroup = UseCaseGroup.Builder()
@@ -283,6 +331,9 @@ class ScanActivity : AppCompatActivity() {
     private fun onQuality(reading: LabelQuality) {
         quality = reading
         if (capturing) return
+        // Readiness drives the shutter, and there is no shutter to drive until
+        // the barcode step is done with.
+        if (phase != Phase.LABEL) return
 
         val now = android.os.SystemClock.elapsedRealtime()
         val band = readiness.update(reading, now)
@@ -321,6 +372,65 @@ class ScanActivity : AppCompatActivity() {
         if (binding.captureButton.isEnabled == enabled) return
         binding.captureButton.isEnabled = enabled
         binding.captureButton.alpha = if (enabled) 1f else 0.4f
+    }
+
+    // -- capture phases ---------------------------------------------------
+
+    /**
+     * Ask for the barcode first.
+     *
+     * The shutter is held shut throughout. There is nothing to capture in this
+     * phase — the barcode is decoded off the preview stream and never
+     * photographed — so an enabled shutter would invite the operator to take a
+     * picture of a barcode the app has no use for.
+     */
+    private fun showBarcodePhase() {
+        phase = Phase.BARCODE
+        skuCode = null
+        binding.instruction.setText(R.string.scan_instruction_barcode)
+        binding.instructionHint.setText(R.string.scan_hint_barcode)
+        binding.skipBarcodeButton.visibility = View.VISIBLE
+        binding.skuChip.visibility = View.GONE
+        binding.roiOverlay.setBand(ReadinessTracker.Band.POOR)
+        setShutterEnabled(false)
+    }
+
+    /**
+     * Move to label capture, with or without an SKU.
+     *
+     * Called from the barcode callback on a decode, and from the skip button
+     * when the operator says the pack has none. Both paths land here so the
+     * label half of the flow has exactly one entry point.
+     */
+    private fun enterLabelPhase(sku: String?) {
+        if (phase == Phase.LABEL) return
+        phase = Phase.LABEL
+        skuCode = sku
+
+        barcodeAnalyzer?.enabled = false
+
+        binding.instruction.setText(R.string.scan_instruction)
+        binding.instructionHint.setText(R.string.scan_hint)
+        binding.skipBarcodeButton.visibility = View.GONE
+
+        binding.skuChip.visibility = View.VISIBLE
+        binding.skuChip.text = if (sku != null) {
+            getString(R.string.scan_sku_found, sku)
+        } else {
+            getString(R.string.scan_sku_skipped)
+        }
+        binding.skuChip.backgroundTintList = ContextCompat.getColorStateList(
+            this,
+            if (sku != null) R.color.hint_good else R.color.hint_fair,
+        )
+
+        // Readiness starts from nothing. Frames scored while the operator was
+        // aiming at a barcode on another face of the pack say nothing about
+        // whether the label is framed, and letting them seed the smoothing
+        // would let the shutter arm before the label is even in view.
+        readiness.reset()
+        analyzer?.enabled = true
+        setShutterEnabled(false)
     }
 
     private fun capture() {
@@ -539,6 +649,7 @@ class ScanActivity : AppCompatActivity() {
                 startActivity(
                     Intent(this, ResultActivity::class.java).apply {
                         putExtra(ResultActivity.EXTRA_SCAN_JSON, ResultActivity.encode(response))
+                        putExtra(ResultActivity.EXTRA_SKU_CODE, skuCode)
                     }
                 )
                 finish()

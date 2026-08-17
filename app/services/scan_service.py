@@ -314,8 +314,15 @@ def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
 
     Empty fields keep their position so the payload stays positional and a
     scanner-side parser does not have to guess which field is missing.
+
+    The SKU code leads, because it is the one field a downstream system can
+    join on. It comes from the pack's barcode rather than from OCR, so it is
+    the only value in the payload that is not a reading — when it is present it
+    is certain, and a scanner should be able to take it without parsing the
+    rest.
     """
     ordered = [
+        values.get("skuCode") or "",
         scan_code,
         values.get("batchNumber") or "",
         values.get("manufacturingDate") or "",
@@ -338,6 +345,7 @@ def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
 #: The printed label uses the same words (BATCH, MFG, EXP, LOT, MRP), so screen
 #: and output now agree as well.
 _CURATED_LABELS = {
+    "skuCode": "SKU",
     "batchNumber": "Batch",
     "manufacturingDate": "MFG",
     "expiryDate": "EXP",

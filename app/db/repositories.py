@@ -19,7 +19,12 @@ from datetime import datetime
 import pyodbc
 
 from app.db.connection import get_connection
-from app.models.response_models import ExtractedField, ProcessingStatus
+from app.models.response_models import (
+    BARCODE_FIELD,
+    ExtractedField,
+    FieldSource,
+    ProcessingStatus,
+)
 from app.services.ocr_service import OcrToken
 
 logger = logging.getLogger(__name__)
@@ -169,18 +174,31 @@ def confirm_scan(
                     ).rowcount
 
                     if not updated:
-                        # A field the operator supplied that OCR never found.
+                        # A field that reached us without OCR having found it.
                         # Recording it as an insert keeps the row complete
                         # rather than silently dropping the operator's work.
+                        #
+                        # Provenance matters here, not just the value. Section
+                        # 16 keeps this trail so a wrong field can be diagnosed
+                        # later, and "OPERATOR" on the SKU would be a lie: it
+                        # was decoded from the pack's barcode, not typed by
+                        # anyone. The two have completely different reliability
+                        # and a future accuracy review must be able to tell them
+                        # apart.
+                        source = (
+                            FieldSource.BARCODE
+                            if name == BARCODE_FIELD
+                            else FieldSource.OPERATOR
+                        )
                         cursor.execute(
                             """
                             INSERT INTO dbo.SkuScanField
                                 (ScanId, FieldName, RawValue, NormalizedValue,
                                  ConfirmedValue, Confidence, Source, WasEdited,
                                  ValidationNote)
-                            VALUES (?, ?, NULL, NULL, ?, 0, 'OPERATOR', 1, ?);
+                            VALUES (?, ?, NULL, NULL, ?, 0, ?, 1, ?);
                             """,
-                            scan_id, name, value, note,
+                            scan_id, name, value, source, note,
                         )
 
                 cursor.execute(

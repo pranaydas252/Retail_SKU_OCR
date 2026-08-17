@@ -100,6 +100,36 @@ class ZplBuilderTest {
     }
 
     @Test
+    fun `the sku row leads the label`() {
+        // SKU takes the place the retailer name used to occupy. It is the only
+        // value on the label that was decoded rather than recognised, so it is
+        // where a person scanning a shelf should look first.
+        val zpl = ZplBuilder.label(
+            listOf(
+                ZplBuilder.Row("SKU", "8901234567890"),
+                ZplBuilder.Row("BATCH", "A23C91"),
+            ),
+            payload,
+        )
+
+        assertTrue(zpl.contains("8901234567890"))
+        assertTrue(
+            "SKU is printed before BATCH",
+            zpl.indexOf("^FDSKU^FS") < zpl.indexOf("^FDBATCH^FS"),
+        )
+    }
+
+    @Test
+    fun `a scan without a barcode simply has no sku row`() {
+        // The barcode step is skippable, and a pack scanned without one must
+        // still print rather than showing an empty SKU line.
+        val zpl = ZplBuilder.label(listOf(ZplBuilder.Row("BATCH", "A23C91")), payload)
+
+        assertTrue(!zpl.contains("^FDSKU^FS"))
+        assertTrue(zpl.contains("^FDBATCH^FS"))
+    }
+
+    @Test
     fun `no retailer name is printed on the label`() {
         // The label is the values and the SKU code. A retailer name hard-codes
         // one customer into a reusable build and spends vertical space, which

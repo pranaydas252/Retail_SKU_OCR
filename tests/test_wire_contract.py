@@ -231,7 +231,11 @@ class TestStatusVocabulary:
     matching and the app reports a generic error."""
 
     def test_kotlin_constants_exist_on_the_server(self):
-        from app.models.response_models import ConfidenceBand, ProcessingStatus
+        from app.models.response_models import (
+            ConfidenceBand,
+            FieldSource,
+            ProcessingStatus,
+        )
 
         source = API_MODELS.read_text(encoding="utf-8")
         declared = set(re.findall(r'const val \w+ = "([A-Z_]+)"', source))
@@ -239,11 +243,10 @@ class TestStatusVocabulary:
         known = (
             {s.value for s in ProcessingStatus}
             | {b.value for b in ConfidenceBand}
-            # Set by the app when the operator edits a value; never sent by the
-            # server, and stored as-is by the confirm endpoint.
-            | {"OPERATOR"}
-            # Field sources, which are plain strings on the server side.
-            | {"OCR_RULES", "DERIVED_RULE", "NOT_FOUND"}
+            # Field sources. Enumerated on the server rather than listed here,
+            # so adding one to ApiModels.kt without adding it to FieldSource
+            # still fails this test - which is the whole point of it.
+            | {s.value for s in FieldSource}
         )
 
         unknown = declared - known

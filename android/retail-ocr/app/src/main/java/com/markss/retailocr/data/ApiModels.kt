@@ -61,6 +61,14 @@ data class ExtractedField(
         const val SOURCE_DERIVED = "DERIVED_RULE"
         const val SOURCE_NOT_FOUND = "NOT_FOUND"
         const val SOURCE_OPERATOR = "OPERATOR"
+
+        /**
+         * Decoded from the pack's barcode rather than recognised from its
+         * printing. The only source in this set that is not a reading:
+         * a barcode either decodes or it does not, so there is nothing for
+         * the operator to check.
+         */
+        const val SOURCE_BARCODE = "BARCODE"
     }
 }
 

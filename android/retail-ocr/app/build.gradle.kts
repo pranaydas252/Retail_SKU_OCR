@@ -140,4 +140,10 @@ dependencies {
     // judge framing, skew and whether a label is present at all before the
     // shutter fires.
     implementation(libs.mlkit.text.recognition)
+
+    // Barcode first, then the label. The barcode carries the SKU code, which is
+    // the only value in the whole scan that is read rather than recognised —
+    // every other field is an OCR guess an operator has to check, and this one
+    // is certain. It is also the field a downstream system can join on.
+    implementation(libs.mlkit.barcode.scanning)
 }

@@ -93,6 +93,27 @@ class ResultActivity : AppCompatActivity() {
         }
         scan = decode(payload)
 
+        // The SKU is not an OCR result. It arrives decoded from the pack's
+        // barcode, so it joins the field set here rather than coming back from
+        // the server, and it is the one value on this screen the operator has
+        // no reason to check. Injecting it as an ordinary field means it edits,
+        // confirms, persists and prints through the paths that already exist.
+        //
+        // Absent when the operator skipped the barcode step, in which case no
+        // card appears at all — the same rule as every other field.
+        intent.getStringExtra(EXTRA_SKU_CODE)?.takeIf { it.isNotBlank() }?.let { sku ->
+            scan = scan.copy(
+                fields = scan.fields + (FIELD_SKU_CODE to ExtractedField(
+                    value = sku,
+                    confidence = 1.0,
+                    band = ExtractedField.BAND_HIGH,
+                    source = ExtractedField.SOURCE_BARCODE,
+                    displayName = getString(R.string.field_sku),
+                    expected = false,
+                ))
+            )
+        }
+
         binding.unsavedBanner.visibility = if (scan.persisted) View.GONE else View.VISIBLE
 
         buildFields()
@@ -610,6 +631,10 @@ class ResultActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "ResultActivity"
         const val EXTRA_SCAN_JSON = "scan_json"
+        const val EXTRA_SKU_CODE = "sku_code"
+
+        /** Must match the backend field name in config/field_aliases.yaml. */
+        const val FIELD_SKU_CODE = "skuCode"
 
         /** Representative data for the debug-only preview. Real values from a
          *  captured can and a peanut butter jar, including a missing field and
