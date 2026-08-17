@@ -49,8 +49,20 @@ fields:
       - MFG DATE
       - MFD DATE
       - MFG.DATE
+      # Packed and manufactured are the same field for this purpose: a pack
+      # states one or the other, never both, and expiry is derived from
+      # whichever it prints. "Date of Packaging" is on a real capture in the
+      # corpus and matched nothing, because matching is exact-or-prefix and
+      # that phrase does not begin with PACKED.
+      - DATE OF PACKAGING
+      - DATE OF PACKING
+      - PACKAGING DATE
+      - PACKAGED ON
+      - PACKING DATE
       - PACKED ON
       - PACKED
+      - PKD DATE
+      - PKD ON
       - MFG
       - MFD
       - PKD
@@ -99,9 +111,28 @@ confidence_weights:
   format: 0.15        # value normalized cleanly for its type
   consistency: 0.05   # cross-field agreement, e.g. mfg < exp
 
-# Penalty applied to a date resolved under an assumed convention rather than
-# an unambiguous one. See normalizer.py.
-ambiguous_date_penalty: 0.25
+# Penalty applied to a date resolved under a stated convention rather than an
+# unambiguous one. See normalizer.py.
+#
+# Was 0.25, and measurement on the 20-image corpus said that was backwards.
+# Of the dates carrying this flag, 11 of 11 were CORRECT; the single wrong date
+# in the corpus was NOT flagged. The flag is anti-correlated with error here,
+# because the conventions it marks are real domain rules rather than guesses:
+# Indian retail prints day-first, of two stamped dates the earlier is
+# manufacture, and a lone stamped date is manufacture. Applying them is knowing
+# something, not assuming something.
+#
+# A 25% cut was therefore charged almost exclusively to values that were right,
+# which is what put a correct scan on screen under four "Low confidence"
+# warnings. An operator warned on every scan stops reading warnings, and then
+# the band says nothing on the scan that genuinely is wrong.
+#
+# Not zero. The conventions are strong, not certain — a pack printing MM/DD
+# would still be read day-first — and the note stays attached to the field
+# either way, so the operator can see which rule was applied.
+#
+# Sample is 17 dates. Revisit when the corpus grows.
+ambiguous_date_penalty: 0.05
 
 # Two-engine agreement, when the VLM runs alongside PP-OCRv5. See ensemble.py.
 #

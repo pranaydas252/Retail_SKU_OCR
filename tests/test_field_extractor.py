@@ -534,3 +534,35 @@ class TestMisreadSlashPrice:
         ])
 
         assert fields["mrp"].normalized.value == "190.00"
+
+
+class TestPackedAsManufactured:
+    """A pack states packed OR manufactured, never both, and expiry derives
+    from whichever it prints (CLAUDE.md section 8)."""
+
+    def test_date_of_packaging_is_a_manufacturing_date(self):
+        # Real wording from SAMPLE_20260816_195926_575. Label matching is
+        # exact-or-prefix, and "Date of Packaging" does not begin with any of
+        # PACKED / PKD / MFG, so it matched nothing until it was listed.
+        fields = extract_fields([
+            token("Date of Packaging:", 153, 244, 306, 64),
+            token("15.05.26", 552, 268, 232, 50),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-05-15"
+
+    def test_pkd_is_a_manufacturing_date(self):
+        fields = extract_fields([
+            token("PKD", 20, 100, 60, 30),
+            token("07/2026", 200, 100),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-07"
+
+    def test_packing_date_is_a_manufacturing_date(self):
+        fields = extract_fields([
+            token("Packing Date", 20, 100, 180, 30),
+            token("07/2026", 300, 100),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-07"

@@ -228,7 +228,26 @@ class Settings(BaseSettings):
 
     # --- Field extraction (Phase 2) --------------------------------------
     field_alias_config: Path = PROJECT_ROOT / "config" / "field_aliases.yaml"
-    confidence_high_threshold: float = 0.95
+
+    # Tuned against the 20-image corpus by scripts/calibrate_confidence.py,
+    # replacing the engineering defaults section 12 said must not be trusted
+    # until they were measured.
+    #
+    # HIGH was 0.95, which admitted no wrong value but reached only 7 of 34
+    # correct ones — so 27 correct values arrived carrying a warning. 0.92 is
+    # the highest-coverage threshold that still admits ZERO wrong values, and
+    # it reaches 11. Precision is kept absolute deliberately: section 24 rates
+    # a wrong value above a missing one, so a wrong value shown as HIGH is the
+    # expensive mistake and a correct one shown as REVIEW costs only a glance.
+    #
+    # REVIEW stays at 0.80, but only after the ambiguity penalty was fixed.
+    # It used to invert: values in 0.80-0.95 were 73% correct against an 83%
+    # base rate while values BELOW 0.80 were 84% correct, because the penalty
+    # was pushing correct convention-resolved dates underneath wrong ones.
+    # With that corrected the ordering is monotonic again — 71% below 0.80,
+    # 77% between, 100% above 0.92 — though LOW and REVIEW are weakly
+    # separated on 41 values and should be revisited as the corpus grows.
+    confidence_high_threshold: float = 0.92
     confidence_review_threshold: float = 0.80
 
     # --- Printer / QR ----------------------------------------------------

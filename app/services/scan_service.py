@@ -308,21 +308,34 @@ def confirm_scan(
 def build_qr_payload(scan_code: str, values: dict[str, str | None]) -> str:
     """Build the QR payload for the printed label (section 17).
 
-    Pipe-delimited and uppercase so ZPL can encode it in alphanumeric mode,
-    which packs two characters per 11 bits. Mixed case or symbols would force
-    byte mode and roughly halve capacity against the 10mm budget.
+    The payload is the SKU code and nothing else.
 
-    Empty fields keep their position so the payload stays positional and a
-    scanner-side parser does not have to guess which field is missing.
+    It used to carry every confirmed field, pipe-delimited. That made the QR a
+    copy of the data rather than a pointer to it, and a copy goes stale: the
+    values are printed as text on the same label, they are already in SQL
+    Server, and the backend is the source of truth for both. Encoding them a
+    third time bought nothing and created a way for the three to disagree.
 
-    The SKU code leads, because it is the one field a downstream system can
-    join on. It comes from the pack's barcode rather than from OCR, so it is
-    the only value in the payload that is not a reading — when it is present it
-    is certain, and a scanner should be able to take it without parsing the
-    rest.
+    A bare SKU also scans better. Section 17 fixes the symbol at 10mm with
+    magnification 2, which caps it at QR version 5 — the previous payload spent
+    most of that budget on data nobody scans the QR to get, while a 13-digit
+    EAN sits comfortably inside a much lower version, and a lower version means
+    larger modules and a more forgiving read on thermal media.
+
+    Uppercased so ZPL encodes it in alphanumeric mode, which packs two
+    characters per 11 bits.
+
+    When the pack has no readable barcode the operator skips that step, and
+    there is no SKU to encode. The label still has to carry a scannable symbol,
+    so the payload falls back to the previous positional form — every confirmed
+    field, led by the scan code. A QR that resolves to nothing would be worse
+    than a verbose one.
     """
+    sku = (values.get("skuCode") or "").strip()
+    if sku:
+        return sku.upper()
+
     ordered = [
-        values.get("skuCode") or "",
         scan_code,
         values.get("batchNumber") or "",
         values.get("manufacturingDate") or "",

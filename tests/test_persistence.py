@@ -126,21 +126,22 @@ class TestQrPayload:
             },
         )
 
-        # SKU leads: it is the only value in the payload that was decoded
-        # rather than recognised, and the only one a downstream system joins on.
-        assert payload == (
-            "8901234567890|SCAN-000001|A23C91|2026-07|2028-06|K18P2|245.00"
-        )
+        # The SKU alone. The fields are printed as text on the same label and
+        # are already in SQL Server, so encoding them a third time made the QR
+        # a copy of the data rather than a pointer to it.
+        assert payload == "8901234567890"
 
-    def test_a_skipped_barcode_leaves_the_sku_position_empty(self):
-        # The barcode step can be skipped, and a pack scanned without one must
-        # still print a payload a scanner can parse positionally.
+    def test_a_skipped_barcode_falls_back_to_the_full_payload(self):
+        # The barcode step can be skipped, and the label still needs a symbol
+        # that resolves to something. A QR encoding nothing is worse than a
+        # verbose one.
         payload = scan_service.build_qr_payload(
-            "SCAN-000002", {"batchNumber": "A23C91"}
+            "SCAN-000002", {"batchNumber": "A23C91", "mrp": "20.00"}
         )
 
-        assert payload.startswith("|SCAN-000002|")
-        assert payload.split("|")[0] == ""
+        assert payload.split("|") == [
+            "SCAN-000002", "A23C91", "", "", "", "20.00",
+        ]
 
     def test_missing_fields_keep_their_position(self):
         # A parser on the scanner side must not have to guess which field is
@@ -150,7 +151,7 @@ class TestQrPayload:
         )
 
         assert payload.split("|") == [
-            "", "SCAN-000001", "A23C91", "", "", "", "20.00",
+            "SCAN-000001", "A23C91", "", "", "", "20.00",
         ]
 
     def test_payload_fits_the_10mm_density_budget(self):
@@ -249,7 +250,19 @@ class TestQrPayloadAuthority:
             },
         )
 
-        assert payload == (
-            "8901234567890|SCAN-000047|A23C92|2026-07|2028-06||245.00"
+        # With a barcode present the payload is the SKU, so a cleared lot code
+        # cannot leak into it at all. The guarantee is checked on the fallback
+        # form, which is the only one that still carries fields.
+        assert payload == "8901234567890"
+
+        without_barcode = scan_service.build_qr_payload(
+            "SCAN-000047",
+            {
+                "batchNumber": "A23C92",
+                "manufacturingDate": "2026-07",
+                "expiryDate": "2028-06",
+                "lotCode": None,
+                "mrp": "245.00",
+            },
         )
-        assert payload.split("|")[5] == "", "cleared lot code must stay blank"
+        assert without_barcode.split("|")[4] == "", "cleared lot code stays blank"
