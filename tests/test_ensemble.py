@@ -185,7 +185,17 @@ class TestFallbackTrigger:
     def _settings(self, **overrides):
         from app.config import get_settings
 
-        return get_settings().model_copy(update={"vlm_enabled": True, **overrides})
+        # vlm_trigger is pinned, not inherited. These tests assert what
+        # "fallback" decides; a deployment running "always" would make them
+        # pass or fail for reasons that have nothing to do with the policy.
+        return get_settings().model_copy(
+            update={
+                "vlm_enabled": True,
+                "vlm_trigger": "fallback",
+                "vlm_fallback_below_core_fields": 2,
+                **overrides,
+            }
+        )
 
     def _tokens(self, *texts):
         from app.services.ocr_service import OcrToken

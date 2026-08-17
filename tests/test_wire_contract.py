@@ -236,6 +236,7 @@ class TestStatusVocabulary:
             FieldSource,
             ProcessingStatus,
         )
+        from app.services import ensemble
 
         source = API_MODELS.read_text(encoding="utf-8")
         declared = set(re.findall(r'const val \w+ = "([A-Z_]+)"', source))
@@ -247,6 +248,11 @@ class TestStatusVocabulary:
             # so adding one to ApiModels.kt without adding it to FieldSource
             # still fails this test - which is the whole point of it.
             | {s.value for s in FieldSource}
+            # Engine identifiers, which the app compares as literals to decide
+            # whether a value was corroborated. Taken from ensemble.py for the
+            # same reason as the sources above: adding one on the device
+            # without adding it here must fail.
+            | {ensemble.PRIMARY, ensemble.SECONDARY}
         )
 
         unknown = declared - known

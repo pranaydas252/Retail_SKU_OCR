@@ -217,3 +217,66 @@ class TestSecondEngineCannotFakeSuccess:
         assert body["fields"]["manufacturingDate"]["value"] == "2026-07"
         # And it is capped, because nothing corroborated it (PLAN.md F2).
         assert body["fields"]["manufacturingDate"]["band"] != "HIGH"
+
+
+class TestContestedFieldsReachTheApp:
+    """When the engines disagree, both readings go to the device.
+
+    The merge keeps the primary so the result stays predictable, not because
+    PP-OCRv5 is more often right — measured, it wins on printed text and the
+    VLM wins on inkjet stamps. Discarding the loser would present a coin flip
+    as a fact, so the alternative travels with the value and the operator, who
+    is holding the pack, decides.
+    """
+
+    def test_a_disagreement_carries_both_values(self, client, monkeypatch):
+        stub_tokens(monkeypatch, [
+            OcrToken("MFG", 10, 10, 60, 20, 0.9),
+            OcrToken("07/2026", 90, 10, 90, 20, 0.9),
+        ])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: True
+        )
+
+        class Disagrees:
+            def tokens(self, image):
+                return [
+                    OcrToken("MFG", 10, 10, 60, 20, 0.9),
+                    OcrToken("01/2026", 90, 10, 90, 20, 0.9),
+                ]
+
+        monkeypatch.setattr(scan_service, "get_vlm_service", lambda: Disagrees())
+
+        field = client.post(
+            "/api/v1/scans", files={"image": ("label.jpg", jpeg(), "image/jpeg")}
+        ).json()["fields"]["manufacturingDate"]
+
+        assert field["value"] == "2026-07"
+        assert field["conflictValue"] == "2026-01"
+        assert sorted(field["engines"]) == ["OCR", "VLM"]
+        assert field["band"] != "HIGH", "a contested field is never presented as HIGH"
+
+    def test_agreement_is_recorded_without_a_conflict(self, client, monkeypatch):
+        stub_tokens(monkeypatch, [
+            OcrToken("MFG", 10, 10, 60, 20, 0.9),
+            OcrToken("07/2026", 90, 10, 90, 20, 0.9),
+        ])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: True
+        )
+
+        class Agrees:
+            def tokens(self, image):
+                return [
+                    OcrToken("MFG", 10, 10, 60, 20, 0.9),
+                    OcrToken("07/2026", 90, 10, 90, 20, 0.9),
+                ]
+
+        monkeypatch.setattr(scan_service, "get_vlm_service", lambda: Agrees())
+
+        field = client.post(
+            "/api/v1/scans", files={"image": ("label.jpg", jpeg(), "image/jpeg")}
+        ).json()["fields"]["manufacturingDate"]
+
+        assert field["conflictValue"] is None
+        assert sorted(field["engines"]) == ["OCR", "VLM"]

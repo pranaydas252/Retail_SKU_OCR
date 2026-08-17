@@ -35,6 +35,9 @@
     <!-- Camera -->
     <string name="scan_instruction">Place the label inside this window</string>
     <string name="field_sku">SKU</string>
+    <string name="result_choice_ocr">OCR  %1$s</string>
+    <string name="result_choice_vlm">AI  %1$s</string>
+    <string name="result_contested">Engines disagree — pick one</string>
     <string name="scan_instruction_barcode">Point at the barcode</string>
     <string name="scan_hint_barcode">Looking for the SKU barcode</string>
     <string name="scan_skip_barcode">No barcode</string>

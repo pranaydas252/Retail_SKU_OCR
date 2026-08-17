@@ -197,8 +197,68 @@ class ResultActivity : AppCompatActivity() {
             if (!hasFocus) markEdited(row, field)
         }
 
+        offerBothReadings(row, field)
+
         rows[name] = row
-        binding.fieldContainer.addView(row.root, cellParams())
+        // A contested field takes the full width. Two dates do not fit side by
+        // side in a half-width cell, and the field the engines disagree about
+        // is the one most worth the operator's attention anyway.
+        binding.fieldContainer.addView(row.root, cellParams(wide = field.isContested))
+    }
+
+    /**
+     * Shows both engines' readings when they disagree, and lets the operator pick.
+     *
+     * Neither engine is reliably right. Measured on the 20-image corpus,
+     * PP-OCRv5 wins on printed text and the vision-language model on inkjet
+     * stamps, and the merge resolves a contest by simply keeping the primary —
+     * not because it is more often correct, but so the result stays
+     * predictable. That makes the displayed value a coin flip presented as a
+     * fact unless the alternative is shown too.
+     *
+     * The operator is holding the pack. They can settle in a second what no
+     * tie-break rule can settle at all.
+     */
+    private fun offerBothReadings(row: ItemFieldBinding, field: ExtractedField) {
+        val other = field.conflictValue
+        if (other == null || field.value == null) {
+            row.choiceRow.visibility = View.GONE
+            return
+        }
+
+        row.choiceRow.visibility = View.VISIBLE
+        row.choicePrimary.text = getString(R.string.result_choice_ocr, field.value)
+        row.choiceSecondary.text = getString(R.string.result_choice_vlm, other)
+
+        fun select(chosen: String) {
+            row.fieldValue.setText(chosen)
+            val primaryChosen = chosen == field.value
+            styleChip(row.choicePrimary, primaryChosen)
+            styleChip(row.choiceSecondary, !primaryChosen)
+        }
+
+        // Nothing is preselected. Highlighting the primary would restore
+        // exactly the false certainty this row exists to remove, and the
+        // EditText already holds it, so the operator can also just confirm.
+        styleChip(row.choicePrimary, false)
+        styleChip(row.choiceSecondary, false)
+
+        row.choicePrimary.setOnClickListener { select(field.value) }
+        row.choiceSecondary.setOnClickListener { select(other) }
+    }
+
+    /** Brand accent for the reading the operator picked; sunken for the other. */
+    private fun styleChip(chip: android.widget.TextView, selected: Boolean) {
+        chip.backgroundTintList = ContextCompat.getColorStateList(
+            this,
+            if (selected) R.color.brand_cyan_container else R.color.surface_sunken,
+        )
+        chip.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (selected) R.color.brand_cyan_pressed else R.color.text_secondary,
+            )
+        )
     }
 
     /**
@@ -208,11 +268,13 @@ class ResultActivity : AppCompatActivity() {
      * every card size to its own text and leaves a ragged right edge. A column
      * weight with a zero base width is what makes the two columns equal.
      */
-    private fun cellParams(): GridLayout.LayoutParams =
+    private fun cellParams(wide: Boolean = false): GridLayout.LayoutParams =
         GridLayout.LayoutParams().apply {
             width = 0
             height = ViewGroup.LayoutParams.WRAP_CONTENT
-            columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            columnSpec =
+                if (wide) GridLayout.spec(GridLayout.UNDEFINED, 2, 1f)
+                else GridLayout.spec(GridLayout.UNDEFINED, 1f)
             // Half the gutter each side, so the space between two cards
             // matches the space between rows.
             val h = (5 * resources.displayMetrics.density).toInt()
@@ -249,6 +311,13 @@ class ResultActivity : AppCompatActivity() {
             // to ignore the colour that matters.
             !field.wasFound -> Triple(
                 R.drawable.dot_neutral, R.string.note_missing, R.color.text_tertiary
+            )
+
+            // Ahead of the band, because it says something the band cannot.
+            // "Check against pack" tells the operator to be careful; this tells
+            // them exactly what the disagreement is and offers both answers.
+            field.isContested -> Triple(
+                R.drawable.dot_review, R.string.result_contested, R.color.band_review
             )
 
             field.isDerived -> Triple(

@@ -46,7 +46,30 @@ data class ExtractedField(
     val displayName: String? = null,
     /** True for the core fields the POC always asks about. */
     val expected: Boolean = false,
+    /**
+     * Which engines produced this value: "OCR", "VLM", or both.
+     *
+     * Both means they agreed, which is the strongest evidence this screen has
+     * — two independent recognisers landing on the same string is hard to do
+     * by accident.
+     */
+    val engines: List<String> = emptyList(),
+    /**
+     * What the other engine read, when the two disagreed. Null otherwise.
+     *
+     * Carried rather than discarded because neither engine is reliably right:
+     * PP-OCRv5 wins on printed text, the VLM on inkjet stamps. Hiding the
+     * loser would present a coin flip as a fact.
+     */
+    val conflictValue: String? = null,
 ) {
+    /** The two engines read this field differently. */
+    val isContested: Boolean get() = conflictValue != null
+
+    /** Both engines produced this value and they matched. */
+    val isCorroborated: Boolean
+        get() = conflictValue == null && engines.size > 1
+
     /** Derived by a rule printed on the pack rather than read from it. */
     val isDerived: Boolean get() = source == SOURCE_DERIVED
 
@@ -69,6 +92,9 @@ data class ExtractedField(
          * the operator to check.
          */
         const val SOURCE_BARCODE = "BARCODE"
+
+        const val ENGINE_OCR = "OCR"
+        const val ENGINE_VLM = "VLM"
     }
 }
 
