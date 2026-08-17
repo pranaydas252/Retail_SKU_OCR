@@ -59,7 +59,12 @@
     <string name="scan_close">Close</string>
     <string name="scan_torch">Torch</string>
     <string name="scan_processing">Reading label…</string>
-    <string name="scan_processing_hint">This takes a few seconds</string>
+    <!-- Both engines run on every scan and the second one is slow: roughly
+         95s measured, up to 160s. "A few seconds" set an expectation the
+         server cannot meet, and an operator who thinks a scan has hung
+         reaches for the back button on a request that was about to
+         succeed. -->
+    <string name="scan_processing_hint">Both readers are checking the label — up to two minutes</string>
     <string name="scan_permission_title">Camera access needed</string>
     <string name="scan_permission_body">The scanner cannot run without the camera. Enable it in Settings to continue.</string>
     <string name="scan_permission_settings">Open settings</string>

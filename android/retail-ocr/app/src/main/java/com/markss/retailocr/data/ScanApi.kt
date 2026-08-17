@@ -55,15 +55,30 @@ object ApiClient {
      * Timeouts sized against measured backend latency, not defaults.
      *
      * A 10-region label takes roughly 4s of CPU-only OCR, and a dense retail
-     * pack will take longer because latency scales with the number of detected
-     * text regions (PLAN.md R8). OkHttp's 10s default would cut off perfectly
-     * healthy scans, so the read timeout is generous while connect stays short
-     * so an unreachable server fails fast.
+     * pack takes longer because latency scales with the number of detected text
+     * regions (PLAN.md R8). OkHttp's 10s default would cut off perfectly
+     * healthy scans.
+     *
+     * The read timeout is sized for BOTH engines. With the vision-language
+     * model running on every scan the server takes roughly 95s on the reference
+     * machine and was measured as high as 160s, against 6s for PP-OCRv5 alone.
+     * At the previous 90s the client gave up on requests the server was still
+     * working on and reported "could not reach the server", which is a lie
+     * about the failure — nothing was unreachable, the answer simply had not
+     * arrived yet.
+     *
+     * 330s is the server's own VLM timeout (vlm_timeout_seconds, 300) plus room
+     * for OCR and transport either side of it. The client must not give up
+     * before the server does; otherwise the operator is told a scan failed
+     * while it goes on to succeed and persist.
+     *
+     * Connect stays short so a genuinely unreachable server still fails fast,
+     * which is what keeps that error message honest.
      */
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(90, TimeUnit.SECONDS)
+            .readTimeout(330, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .addInterceptor(baseUrlInterceptor())
             .addInterceptor(apiKeyInterceptor())
