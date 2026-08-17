@@ -17,6 +17,15 @@ package com.markss.retailocr.ocr
  *  * a hold, so green persists briefly after the last good frame — which is
  *    what makes it pressable, and is the difference between a gate that helps
  *    and one that taunts.
+ *
+ * This is advice, not a decision. The operator presses the shutter; nothing
+ * here fires it and nothing here blocks it (CLAUDE.md section 4). An earlier
+ * version captured by itself once the frame had held green for a dwell period,
+ * on the reasoning that the frame knows better than human reaction time when
+ * it is worth keeping. That reasoning was wrong about who is in charge: the
+ * operator can see things the score cannot — that this is the wrong face of
+ * the pack, that a hand is about to move, that they are not ready — and a
+ * shutter that fires on its own overrides all of it.
  */
 class ReadinessTracker {
 
@@ -59,12 +68,7 @@ class ReadinessTracker {
             else -> green
         }
 
-        if (green) {
-            lastGreenAt = now
-            if (greenSince == 0L) greenSince = now
-        } else {
-            greenSince = 0L
-        }
+        if (green) lastGreenAt = now
 
         // Hold green briefly after the last good frame. A hand shake should not
         // retract an offer the operator is already reaching for.
@@ -78,25 +82,11 @@ class ReadinessTracker {
         return band
     }
 
-    /**
-     * Whether the frame has been good long enough to capture without being asked.
-     *
-     * Auto-capture is the real fix for "it went away before I could press it":
-     * the moment the frame is worth keeping is decided by the frame, not by
-     * human reaction time. The dwell is what stops it firing as the camera
-     * sweeps across a label on the way somewhere else.
-     */
-    fun shouldAutoCapture(now: Long): Boolean =
-        green && greenSince != 0L && now - greenSince >= AUTO_CAPTURE_DWELL_MS
-
-    private var greenSince = 0L
-
     fun reset() {
         smoothed = 0f
         seenAny = false
         green = false
         lastGreenAt = 0L
-        greenSince = 0L
         band = Band.POOR
     }
 
@@ -114,8 +104,5 @@ class ReadinessTracker {
 
         /** How long green survives after the last good frame. */
         const val GREEN_HOLD_MS = 1200L
-
-        /** How long green must hold before the shutter fires by itself. */
-        const val AUTO_CAPTURE_DWELL_MS = 600L
     }
 }

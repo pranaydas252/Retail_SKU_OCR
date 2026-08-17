@@ -327,10 +327,23 @@ things the server architecture structurally cannot:
 - **A second opinion.** Its tokens are complementary — it read values PP-OCRv5
   never recognised — and at 252ms it is nearly free to consult.
 
-The gate is **advisory**. It never disables the capture button. A gate that
-silently refuses to fire is indistinguishable from a broken app, and on a label
-the recogniser happens to misread it would make the scan impossible rather than
-merely harder.
+The gate is **advisory, in both directions**. It never disables the capture
+button, and it never presses it either.
+
+It must not disable the button because a gate that silently refuses to fire is
+indistinguishable from a broken app, and on a label the recogniser happens to
+misread it would make the scan impossible rather than merely harder.
+
+It must not fire the button because **the operator decides when to capture**.
+An earlier build auto-captured once the score had held green for a dwell
+period, reasoning that the frame knows better than human reaction time when it
+is worth keeping. That was wrong about who is in charge. The operator can see
+what the score cannot — that this is the wrong face of the pack, that a hand is
+about to move, that they are simply not ready — and a shutter firing on its own
+overrides all of it. It also produced a motion-blurred capture in the gated
+corpus (PLAN.md F3): the app chose a frame no person would have chosen.
+
+So: the band colours the ROI brackets and the hint text, and nothing else.
 
 Primary extraction stays on the server, so the rule in section 3 still holds.
 

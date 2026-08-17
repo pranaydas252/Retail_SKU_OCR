@@ -90,30 +90,30 @@ class ReadinessTrackerTest {
     }
 
     @Test
-    fun `auto capture waits for the frame to hold`() {
-        val tracker = ReadinessTracker()
-        var now = 0L
+    fun `the tracker only ever reports a band`() {
+        // It advises; it does not capture. There is deliberately no method here
+        // that fires the shutter, and no threshold that arms it - the operator
+        // decides (CLAUDE.md section 4). This test exists so that stays true:
+        // reintroducing auto-capture means deleting an assertion that says
+        // out loud why it was removed.
+        val methods = ReadinessTracker::class.java.methods.map { it.name }
 
-        // One good frame must not fire the shutter - the camera sweeping past a
-        // label on its way somewhere else would trigger a scan nobody asked for.
-        now += FRAME_MS
-        tracker.update(good(), now)
-        assertFalse(tracker.shouldAutoCapture(now))
-
-        now = settle(tracker, good(), 12, now)
-        assertTrue(tracker.shouldAutoCapture(now))
+        assertFalse(
+            "readiness must not decide when to capture",
+            methods.any { it.contains("autoCapture", ignoreCase = true) },
+        )
     }
 
     @Test
-    fun `reset re-arms nothing`() {
+    fun `reset returns to a cold start`() {
         val tracker = ReadinessTracker()
-        val now = settle(tracker, good(), 12)
-        assertTrue(tracker.shouldAutoCapture(now))
+        settle(tracker, good(), 12)
+        assertEquals(ReadinessTracker.Band.GOOD, tracker.band)
 
         tracker.reset()
 
         assertEquals(ReadinessTracker.Band.POOR, tracker.band)
-        assertFalse(tracker.shouldAutoCapture(now))
+        assertEquals(0, tracker.score)
     }
 
     private companion object {

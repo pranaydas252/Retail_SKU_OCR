@@ -141,20 +141,17 @@ class ScanActivity : AppCompatActivity() {
 
         if (AppPreferences.sampleMode) showSampleCount()
 
-        // Held shut until the framing earns it, in BOTH modes.
+        // Sample collection runs the identical flow, deliberately.
         //
-        // Sample collection used to be exempt, on the reasoning that its
-        // purpose is to gather difficult images including ones the gate would
-        // reject. That was wrong, and the accuracy numbers show why: a corpus
-        // collected without the gate is not the input the backend receives,
-        // because in production the gate is what decides which frames exist at
-        // all. Measuring a recognition engine against frames that could never
-        // reach it produces a number describing nothing.
+        // It used to be exempt from the readiness gate, on the reasoning that
+        // its purpose is to gather difficult images including ones the gate
+        // would reject. That was wrong, and the accuracy numbers show why: a
+        // corpus collected under different rules is not the input the backend
+        // receives. Samples are captured exactly as scans are, and differ only
+        // in what happens afterwards.
         //
-        // So samples are captured exactly as scans are — same score, same
-        // hysteresis, same auto-capture — and differ only in what happens
-        // afterwards.
-        setShutterEnabled(false)
+        // showBarcodePhase() above has already parked the shutter for the
+        // barcode step.
 
         positionInstructionAboveRoi()
 
@@ -359,13 +356,12 @@ class ScanActivity : AppCompatActivity() {
                 ReadinessTracker.Band.POOR -> R.color.hint_poor
             },
         )
-        setShutterEnabled(band == ReadinessTracker.Band.GOOD)
-
-        // Fire by itself once the frame has held up for a moment. The instant a
-        // frame is worth keeping is decided by the frame, not by how quickly
-        // someone can reach the button — which is what made a good reading
-        // unusable before.
-        if (readiness.shouldAutoCapture(now)) capture()
+        // The band colours the brackets and the hint, and that is all it does.
+        // It does not arm the shutter and it does not fire it: the operator
+        // decides when to capture (CLAUDE.md section 4). A gate that refuses to
+        // fire is indistinguishable from a broken app, and on a label the
+        // recogniser happens to misread it would make the scan impossible
+        // rather than merely harder.
     }
 
     private fun setShutterEnabled(enabled: Boolean) {
@@ -430,7 +426,11 @@ class ScanActivity : AppCompatActivity() {
         // would let the shutter arm before the label is even in view.
         readiness.reset()
         analyzer?.enabled = true
-        setShutterEnabled(false)
+
+        // Live immediately. The band still advises through the brackets and the
+        // hint, but it does not hold the shutter shut - the operator decides
+        // when the frame is worth keeping.
+        setShutterEnabled(true)
     }
 
     private fun capture() {
@@ -570,10 +570,10 @@ class ScanActivity : AppCompatActivity() {
         binding.capturedPreview.setImageDrawable(null)
         binding.roiOverlay.visibility = View.VISIBLE
         // Start the reading again from nothing. Carrying the old score over
-        // would re-arm the shutter — and with auto-capture, immediately fire it
-        // again on a frame nobody has looked at since the failure.
+        // would show a stale band for the first second of the retry, describing
+        // the frame that just failed rather than the one being aimed now.
         readiness.reset()
-        setShutterEnabled(false)
+        setShutterEnabled(true)
         analyzer?.enabled = true
     }
 
