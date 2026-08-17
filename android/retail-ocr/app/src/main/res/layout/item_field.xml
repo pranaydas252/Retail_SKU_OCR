@@ -134,7 +134,15 @@
             android:visibility="gone"
             tools:visibility="visible">
 
-            <TextView
+            <!--
+                Each chip is a caption over a value, the same hierarchy the card
+                itself uses. Run together on one line as "AI 2026-01" the engine
+                name read as part of the reading — the operator could not tell
+                where the label stopped and the value started, which on a field
+                whose whole purpose is comparing two values is the one thing it
+                could not afford.
+            -->
+            <LinearLayout
                 android:id="@+id/choicePrimary"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -142,32 +150,68 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_chip_neutral"
                 android:clickable="true"
-                android:ellipsize="end"
                 android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:maxLines="1"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
                 android:paddingHorizontal="10dp"
-                android:paddingVertical="8dp"
-                android:textAppearance="@style/TextAppearance.RetailOcr.SummaryChip"
-                tools:text="OCR  2026-07" />
+                android:paddingVertical="8dp">
 
-            <TextView
+                <TextView
+                    android:id="@+id/choicePrimaryLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/result_engine_ocr"
+                    android:textAppearance="@style/TextAppearance.RetailOcr.FieldNote" />
+
+                <TextView
+                    android:id="@+id/choicePrimaryValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.RetailOcr.Value"
+                    tools:text="2026-07" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/choiceSecondary"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:background="@drawable/bg_chip_neutral"
                 android:clickable="true"
-                android:ellipsize="end"
                 android:focusable="true"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:maxLines="1"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
                 android:paddingHorizontal="10dp"
-                android:paddingVertical="8dp"
-                android:textAppearance="@style/TextAppearance.RetailOcr.SummaryChip"
-                tools:text="AI  2026-01" />
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:id="@+id/choiceSecondaryLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/result_engine_vlm"
+                    android:textAppearance="@style/TextAppearance.RetailOcr.FieldNote" />
+
+                <TextView
+                    android:id="@+id/choiceSecondaryValue"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.RetailOcr.Value"
+                    tools:text="2026-01" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Says WHY a value is doubtful. A band with no reason only tells the

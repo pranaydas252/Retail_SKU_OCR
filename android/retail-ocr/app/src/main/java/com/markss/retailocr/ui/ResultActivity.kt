@@ -227,36 +227,51 @@ class ResultActivity : AppCompatActivity() {
         }
 
         row.choiceRow.visibility = View.VISIBLE
-        row.choicePrimary.text = getString(R.string.result_choice_ocr, field.value)
-        row.choiceSecondary.text = getString(R.string.result_choice_vlm, other)
+        row.choicePrimaryValue.text = field.value
+        row.choiceSecondaryValue.text = other
 
         fun select(chosen: String) {
             row.fieldValue.setText(chosen)
             val primaryChosen = chosen == field.value
-            styleChip(row.choicePrimary, primaryChosen)
-            styleChip(row.choiceSecondary, !primaryChosen)
+            styleChip(row, primary = true, selected = primaryChosen)
+            styleChip(row, primary = false, selected = !primaryChosen)
         }
 
         // Nothing is preselected. Highlighting the primary would restore
         // exactly the false certainty this row exists to remove, and the
         // EditText already holds it, so the operator can also just confirm.
-        styleChip(row.choicePrimary, false)
-        styleChip(row.choiceSecondary, false)
+        styleChip(row, primary = true, selected = false)
+        styleChip(row, primary = false, selected = false)
 
         row.choicePrimary.setOnClickListener { select(field.value) }
         row.choiceSecondary.setOnClickListener { select(other) }
     }
 
-    /** Brand accent for the reading the operator picked; sunken for the other. */
-    private fun styleChip(chip: android.widget.TextView, selected: Boolean) {
+    /**
+     * Brand accent for the reading the operator picked; sunken for the other.
+     *
+     * The engine name stays quieter than the value at both states. It is there
+     * to say where a reading came from, not to compete with the reading itself.
+     */
+    private fun styleChip(row: ItemFieldBinding, primary: Boolean, selected: Boolean) {
+        val chip = if (primary) row.choicePrimary else row.choiceSecondary
+        val label = if (primary) row.choicePrimaryLabel else row.choiceSecondaryLabel
+        val value = if (primary) row.choicePrimaryValue else row.choiceSecondaryValue
+
         chip.backgroundTintList = ContextCompat.getColorStateList(
             this,
             if (selected) R.color.brand_cyan_container else R.color.surface_sunken,
         )
-        chip.setTextColor(
+        value.setTextColor(
             ContextCompat.getColor(
                 this,
-                if (selected) R.color.brand_cyan_pressed else R.color.text_secondary,
+                if (selected) R.color.brand_cyan_pressed else R.color.text_primary,
+            )
+        )
+        label.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (selected) R.color.brand_cyan_pressed else R.color.text_tertiary,
             )
         )
     }
