@@ -129,13 +129,28 @@ def process_scan(
             fields, overall_confidence = extract_and_score(tokens, vlm_tokens)
 
     timings = timer.as_dict()
-    # Either engine reading something means the scan succeeded. Keying this to
-    # PP-OCRv5 alone would tell the operator to recapture a label the second
-    # engine had just read perfectly — which is precisely the case the second
-    # engine exists for.
+    # What counts as "the scan read something".
+    #
+    # PP-OCRv5 tokens are evidence on their own: a detector that finds no boxes
+    # is telling us the frame carries no text, and one that finds them is
+    # telling us it does. The second engine cannot make that claim, because it
+    # never declines — measured on the corpus it missed 4 values where
+    # PP-OCRv5 missed 29, and it answers a blank page as readily as a label.
+    # Enabling it turned a white test image into a COMPLETED scan with zero
+    # fields, which would send an operator to a confirmation screen with
+    # nothing on it instead of asking them to recapture.
+    #
+    # So the VLM earns COMPLETED by producing a FIELD, not by producing output.
+    # Keying this to PP-OCRv5 alone would be the opposite mistake — telling the
+    # operator to recapture a label the second engine had just read perfectly,
+    # which is the case the second engine exists for.
+    vlm_found_a_field = any(
+        field.value is not None for field in fields.values()
+    ) if vlm_tokens else False
+
     status = (
         ProcessingStatus.COMPLETED
-        if (tokens or vlm_tokens)
+        if (tokens or vlm_found_a_field)
         else ProcessingStatus.NO_TEXT_DETECTED
     )
 
@@ -460,10 +475,17 @@ def extract_and_score(
         scores[name] = score
         found.add(name)
 
+        # A value only the VLM produced, with nothing from PP-OCRv5 to check it
+        # against. Capped into REVIEW no matter how well it scores — see
+        # confidence.band for the measured reason.
+        vlm_only = (
+            merged_field.engines == (ensemble.SECONDARY,)
+        )
+
         fields[name] = ExtractedField(
             value=candidate.normalized.value,
             confidence=score,
-            band=confidence.band(score),
+            band=confidence.band(score, uncorroborated_secondary=vlm_only),
             source="DERIVED_RULE" if candidate.strategy == "derived" else "OCR_RULES",
             rawValue=candidate.raw_value,
             displayName=display_name(name),

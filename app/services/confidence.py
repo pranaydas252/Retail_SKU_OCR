@@ -105,14 +105,28 @@ def score_field(
     return round(max(0.0, min(1.0, score)), 4)
 
 
-def band(score: float) -> ConfidenceBand:
+def band(score: float, uncorroborated_secondary: bool = False) -> ConfidenceBand:
     """Map a score to its UI treatment band.
 
-    Thresholds are initial engineering defaults from section 12 and must be
-    tuned against real label images.
+    Thresholds are tuned against the gated corpus by
+    ``scripts/calibrate_confidence.py``; see app/config.py for what the
+    measurement said.
+
+    ``uncorroborated_secondary`` marks a value only the vision-language model
+    produced, with nothing from PP-OCRv5 to check it against. Such a value is
+    capped at REVIEW however well it scores.
+
+    That cap is not a hedge, it is the measured failure profile. On the 20-image
+    corpus the VLM never declined — 4 missed against PP-OCRv5's 29 — and
+    produced this project's only two false accepts: a fabricated lot code, and
+    a lot code filed under batch. An engine that always answers cannot signal
+    its own uncertainty, so its errors are indistinguishable from its successes,
+    and section 24 ranks a confidently wrong value as the worst outcome here.
+    Corroboration is the only evidence that separates the two, and when it is
+    absent the operator has to be the one who looks.
     """
     settings = get_settings()
-    if score >= settings.confidence_high_threshold:
+    if score >= settings.confidence_high_threshold and not uncorroborated_secondary:
         return ConfidenceBand.HIGH
     if score >= settings.confidence_review_threshold:
         return ConfidenceBand.REVIEW

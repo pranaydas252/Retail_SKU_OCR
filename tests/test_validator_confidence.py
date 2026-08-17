@@ -185,3 +185,29 @@ class TestOverallConfidence:
     def test_returns_none_when_nothing_found(self):
         assert confidence.overall({"a": 0.0}, set()) is None
         assert confidence.overall({}) is None
+
+
+class TestUncorroboratedSecondaryIsCapped:
+    """A value only the VLM produced cannot be presented as HIGH (PLAN.md F2).
+
+    Measured on the 20-image corpus, the VLM never declines — 4 missed against
+    PP-OCRv5's 29 — and produced the project's only two false accepts. An
+    engine that always answers cannot signal its own uncertainty, so its
+    mistakes look exactly like its successes. Corroboration is the only thing
+    that tells them apart.
+    """
+
+    def test_a_vlm_only_value_is_capped_at_review(self):
+        assert confidence.band(0.99, uncorroborated_secondary=True) == (
+            ConfidenceBand.REVIEW
+        )
+
+    def test_the_same_score_reaches_high_when_corroborated(self):
+        assert confidence.band(0.99) == ConfidenceBand.HIGH
+
+    def test_the_cap_does_not_rescue_a_poor_score(self):
+        # It caps the top of the range, it does not lift the bottom: a badly
+        # scoring VLM-only value stays LOW rather than being promoted.
+        assert confidence.band(0.10, uncorroborated_secondary=True) == (
+            ConfidenceBand.LOW
+        )

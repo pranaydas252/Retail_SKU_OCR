@@ -158,3 +158,62 @@ class TestCreateScan:
         ).json()["timings"]
 
         assert {"validateMs", "storeMs", "ocrMs", "totalMs"} <= set(timings)
+
+
+class TestSecondEngineCannotFakeSuccess:
+    """The VLM earns COMPLETED by producing a field, not by producing output.
+
+    It never declines. On the 20-image corpus it missed 4 values where
+    PP-OCRv5 missed 29, and it answers a blank page as readily as a label —
+    enabling it turned a white test image into a COMPLETED scan carrying zero
+    fields, which sends the operator to an empty confirmation screen instead of
+    asking for a recapture.
+    """
+
+    def test_vlm_output_without_a_field_is_still_no_text(self, client, monkeypatch):
+        # PP-OCRv5 finds nothing; the VLM emits text that yields no field.
+        stub_tokens(monkeypatch, [])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: True
+        )
+
+        class Chatty:
+            def tokens(self, image):
+                return [OcrToken("a blank white page", 0, 0, 10, 10, 0.9)]
+
+        monkeypatch.setattr(scan_service, "get_vlm_service", lambda: Chatty())
+
+        response = client.post(
+            "/api/v1/scans", files={"image": ("blank.jpg", jpeg(), "image/jpeg")}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "NO_TEXT_DETECTED"
+
+    def test_a_field_from_the_vlm_alone_does_count(self, client, monkeypatch):
+        # The case the second engine exists for: PP-OCRv5 read nothing and the
+        # VLM read the stamp. Telling the operator to recapture here would
+        # discard a good result.
+        stub_tokens(monkeypatch, [])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: True
+        )
+
+        class Reader:
+            def tokens(self, image):
+                return [
+                    OcrToken("MFG", 10, 10, 60, 20, 0.9),
+                    OcrToken("07/2026", 90, 10, 90, 20, 0.9),
+                ]
+
+        monkeypatch.setattr(scan_service, "get_vlm_service", lambda: Reader())
+
+        response = client.post(
+            "/api/v1/scans", files={"image": ("label.jpg", jpeg(), "image/jpeg")}
+        )
+
+        body = response.json()
+        assert body["status"] == "COMPLETED"
+        assert body["fields"]["manufacturingDate"]["value"] == "2026-07"
+        # And it is capped, because nothing corroborated it (PLAN.md F2).
+        assert body["fields"]["manufacturingDate"]["band"] != "HIGH"
