@@ -356,12 +356,20 @@ class ScanActivity : AppCompatActivity() {
                 ReadinessTracker.Band.POOR -> R.color.hint_poor
             },
         )
-        // The band colours the brackets and the hint, and that is all it does.
-        // It does not arm the shutter and it does not fire it: the operator
-        // decides when to capture (CLAUDE.md section 4). A gate that refuses to
-        // fire is indistinguishable from a broken app, and on a label the
-        // recogniser happens to misread it would make the scan impossible
-        // rather than merely harder.
+        // The band arms the shutter. It does not fire it.
+        //
+        // Those are two separate powers and the split is deliberate: the gate
+        // decides whether a frame is worth offering, and the operator decides
+        // whether to take it. Auto-capture gave the gate both, and it used them
+        // to keep a motion-blurred frame nobody would have chosen (PLAN.md F3).
+        //
+        // Blocking a poor frame is the point of the gate. Every accuracy figure
+        // in this project is measured on frames an operator chose to keep, and
+        // until this existed nothing checked whether keeping them was a good
+        // idea. An unreadable capture costs a round trip to the server and
+        // comes back as a failed scan, so refusing it early is cheaper for the
+        // operator than letting it through.
+        setShutterEnabled(band == ReadinessTracker.Band.GOOD)
     }
 
     private fun setShutterEnabled(enabled: Boolean) {
@@ -427,10 +435,10 @@ class ScanActivity : AppCompatActivity() {
         readiness.reset()
         analyzer?.enabled = true
 
-        // Live immediately. The band still advises through the brackets and the
-        // hint, but it does not hold the shutter shut - the operator decides
-        // when the frame is worth keeping.
-        setShutterEnabled(true)
+        // Shut until a reading earns it. The first frames after the phase
+        // switch are of whatever the operator was pointing at for the barcode,
+        // which is usually another face of the pack entirely.
+        setShutterEnabled(false)
     }
 
     private fun capture() {
@@ -570,10 +578,10 @@ class ScanActivity : AppCompatActivity() {
         binding.capturedPreview.setImageDrawable(null)
         binding.roiOverlay.visibility = View.VISIBLE
         // Start the reading again from nothing. Carrying the old score over
-        // would show a stale band for the first second of the retry, describing
-        // the frame that just failed rather than the one being aimed now.
+        // would arm the shutter on the strength of the frame that just failed,
+        // rather than the one being aimed now.
         readiness.reset()
-        setShutterEnabled(true)
+        setShutterEnabled(false)
         analyzer?.enabled = true
     }
 

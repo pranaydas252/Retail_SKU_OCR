@@ -327,23 +327,33 @@ things the server architecture structurally cannot:
 - **A second opinion.** Its tokens are complementary — it read values PP-OCRv5
   never recognised — and at 252ms it is nearly free to consult.
 
-The gate is **advisory, in both directions**. It never disables the capture
-button, and it never presses it either.
+**The gate arms the shutter. The operator fires it.**
 
-It must not disable the button because a gate that silently refuses to fire is
-indistinguishable from a broken app, and on a label the recogniser happens to
-misread it would make the scan impossible rather than merely harder.
+Two separate powers, split deliberately.
 
-It must not fire the button because **the operator decides when to capture**.
-An earlier build auto-captured once the score had held green for a dwell
-period, reasoning that the frame knows better than human reaction time when it
-is worth keeping. That was wrong about who is in charge. The operator can see
-what the score cannot — that this is the wrong face of the pack, that a hand is
-about to move, that they are simply not ready — and a shutter firing on its own
-overrides all of it. It also produced a motion-blurred capture in the gated
-corpus (PLAN.md F3): the app chose a frame no person would have chosen.
+**Arming is the gate's job.** The capture button is disabled until the smoothed
+band reaches GOOD. A frame too poor to read costs a round trip to the server
+and comes back as a failed scan, so refusing it on the device is cheaper for
+the operator than letting it through. This is also the only thing in the system
+that checks whether a frame was worth keeping — every accuracy figure in this
+project is measured on frames an operator chose, and nothing else audits that
+choice.
 
-So: the band colours the ROI brackets and the hint text, and nothing else.
+**Firing is the operator's.** The app must not capture by itself. An earlier
+build auto-captured once the score had held green for a 600ms dwell, reasoning
+that the frame knows better than human reaction time when it is worth keeping.
+That was wrong about who is in charge: the operator can see what the score
+cannot — that this is the wrong face of the pack, that a hand is about to move,
+that they are simply not ready. It also kept a motion-blurred frame in the
+gated corpus that no person would have chosen (`PLAN.md` F3).
+
+**Correction, 2026-08-17.** This section previously said the gate "never
+disables the capture button", on the reasoning that a gate which refuses to
+fire is indistinguishable from a broken app. That concern is real but it is
+handled by the hint text, which always says what is wrong and what to do about
+it — "Move closer", "Straighten the label", "Hold steady". A disabled button
+beside a specific instruction is not a mystery. Letting unreadable frames
+through to be diagnosed on the server is the worse trade.
 
 Primary extraction stays on the server, so the rule in section 3 still holds.
 

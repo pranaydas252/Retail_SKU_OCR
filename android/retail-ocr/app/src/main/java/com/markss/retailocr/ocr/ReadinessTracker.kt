@@ -18,14 +18,18 @@ package com.markss.retailocr.ocr
  *    what makes it pressable, and is the difference between a gate that helps
  *    and one that taunts.
  *
- * This is advice, not a decision. The operator presses the shutter; nothing
- * here fires it and nothing here blocks it (CLAUDE.md section 4). An earlier
- * version captured by itself once the frame had held green for a dwell period,
- * on the reasoning that the frame knows better than human reaction time when
- * it is worth keeping. That reasoning was wrong about who is in charge: the
- * operator can see things the score cannot — that this is the wrong face of
- * the pack, that a hand is about to move, that they are not ready — and a
- * shutter that fires on its own overrides all of it.
+ * The band arms the shutter; it never fires it. Those are two separate powers
+ * and the split is the whole design (CLAUDE.md section 4).
+ *
+ * Arming is what the gate is for: a frame too poor to read costs a round trip
+ * to the server and comes back as a failed scan, so refusing it here is
+ * cheaper for the operator than letting it through.
+ *
+ * Firing belongs to the operator. An earlier version captured by itself once
+ * the score had held green for a dwell period, reasoning that the frame knows
+ * better than human reaction time when it is worth keeping. That was wrong
+ * about who is in charge — the operator can see what the score cannot, and it
+ * kept a motion-blurred frame nobody would have chosen (PLAN.md F3).
  */
 class ReadinessTracker {
 
