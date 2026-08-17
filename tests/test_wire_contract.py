@@ -42,14 +42,14 @@ from app.models.response_models import (
 API_MODELS = (
     Path(__file__).resolve().parent.parent
     / "android"
-    / "dmart-ocr"
+    / "retail-ocr"
     / "app"
     / "src"
     / "main"
     / "java"
     / "com"
     / "markss"
-    / "dmartocr"
+    / "retailocr"
     / "data"
     / "ApiModels.kt"
 )

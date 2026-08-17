@@ -1,4 +1,4 @@
-# D-Mart SKU Label OCR — Phase Plan
+# Reliance Retail SKU Label OCR — Phase Plan
 
 Scope authority is [CLAUDE.md](CLAUDE.md). This file is the execution plan only — where CLAUDE.md and this file disagree, CLAUDE.md wins.
 
@@ -37,13 +37,13 @@ Section references below (§n) point at CLAUDE.md sections.
 | --- | --- | --- | --- | --- | --- |
 | R1 | PaddleOCR **3.x** API differs from the 2.x style implied by common examples | Silent breakage / rewrite | **Confirmed by introspection** — see §1a below. Paddle imports confined to `ocr_service.py`; everything downstream eats our own `OcrToken(text, bbox, confidence)` | 1 | Characterized |
 | R2 | First PaddleOCR run downloads models from the network | Slow first scan / air-gapped failure | **Accepted by user.** Models pre-initialized before demo. `scripts/warmup_models.py` + startup warmup inference + Android "preparing OCR" state. Model dir configurable, vendored to `models/` for deploy | 1 / 6 | Resolved |
-| R3 | No real D-Mart label images yet, and **public datasets are dropped** — PaddleOCR is used zero-shot | No accuracy gate can run until images arrive | **Accepted.** Extraction logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. `sample_data/` structure stays ready | 2 | Accepted |
+| R3 | No real Reliance Retail label images yet, and **public datasets are dropped** — PaddleOCR is used zero-shot | No accuracy gate can run until images arrive | **Accepted.** Extraction logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. `sample_data/` structure stays ready | 2 | Accepted |
 | R4 | Indian retail labels often carry Devanagari/regional script alongside English | Junk tokens, bad spatial association | Start `lang="en"`; evaluate multilingual only if real images demand it. Log unrecognized-script rate | 2 | Open |
 | R5 | TC22 not yet connected | Camera/printer assumptions untested | Develop on SM-S711B; TC22 arriving. See R10 — the Zebra-only gate must not block this | 4 | Open |
 | R10 | **Zebra-only device gate blocks all development** until a TC22 physically arrives | Phase 4 stalls entirely | Gate driven by a build-config flag: `debug → ENFORCE_ZEBRA_ONLY=false`, `release → true`. Debug bypass logs a loud warning and is never enabled in release | 4 | Mitigated by design |
 | R11 | EMDK `PackageManager` check silently fails on **every** device, Zebra included, if the Android 11+ `<queries>` element is missing | Gate rejects genuine TC22s; looks like a hardware fault | Manifest must declare `<queries><package android:name="com.symbol.emdk.emdkservice" /></queries>`. Add a test that asserts its presence | 4 | Known |
 | R12 | Client device check is spoofable; APK installs on non-Zebra hardware | Restriction is advisory, not enforced | **Accepted by user, no server-side allowlist.** The app is useless off a TC22 because the scan flow refuses to start, and distribution is a controlled store estate. Do not add server-side device validation unless asked | 4 | Accepted |
-| R6 | ZQ320 needs Zebra ZSDK (Link-OS AAR, not on Maven Central) | Build blocked | Obtain SDK during Phase 3 so it is in hand before Phase 5. Vendor to `android/dmart-ocr/app/libs/` (git-ignored) | 5 | Open |
+| R6 | ZQ320 needs Zebra ZSDK (Link-OS AAR, not on Maven Central) | Build blocked | Obtain SDK during Phase 3 so it is in hand before Phase 5. Vendor to `android/retail-ocr/app/libs/` (git-ignored) | 5 | Open |
 | R7 | Self-signed HTTPS cert rejected by TC22 | End-to-end blocked at the last step | Decide cert strategy before Phase 6; if self-signed, plan Android network-security-config + device trust store install | 6 | Open |
 | R8 | CPU-only OCR latency **scales with detected region count, not image size** — measured 1.6 s for a 2-region image but **3.9–4.1 s for a 10-region label**. Real SKU labels carry far more text (ingredients, addresses, barcodes, statutory text) and could plausibly hit 30–60 regions | Poor operator UX; possibly unusable | Partly addressed (see §1c). **Dominant remaining lever: the fixed ROI window (§4).** The app crops the capture to the on-screen ROI automatically — no operator crop step — so OCR never sees surrounding packaging. Phase 4 change. Only if p95 is still bad, add the optional WebSocket (§14) — **no queue** | 1 → 4 → 7 | Measured, mitigation designed |
 | R14 | ROI crop uses preview coordinates against a full-resolution capture | Wrong region cropped, subtly rather than obviously — bad OCR that looks like a model problem | Bind preview + capture to a shared `ViewPort` in a `UseCaseGroup` so CameraX derives a consistent crop rect. Verify the mapping on the TC22, not on the dev device | 4 | Known |
@@ -73,7 +73,7 @@ Originally planned as `server_det + mobile_rec` from published benchmarks. **Mea
 
 Published figures implied a ~2.5× gap; the real gap here is **7.6×**, and server detection bought nothing on this input. 10.6 extra seconds per scan is not a defensible trade for an operator workflow.
 
-Caveat, stated honestly: the test image was clean synthetic text — the easy case. Server detection's advantage should appear on glare, blur, and small dense print, which is exactly what cannot be measured until real D-Mart labels exist. Both model names stay config-driven, and this decision is re-opened at the Phase 2 accuracy gate.
+Caveat, stated honestly: the test image was clean synthetic text — the easy case. Server detection's advantage should appear on glare, blur, and small dense print, which is exactly what cannot be measured until real Reliance Retail labels exist. Both model names stay config-driven, and this decision is re-opened at the Phase 2 accuracy gate.
 
 **Runtime blocker found and fixed.** PaddlePaddle 3.3.1 on Windows CPU crashes during text detection:
 
@@ -150,7 +150,7 @@ Constraints: magnification must not drop below 2 (1-dot modules are unreliable o
 
 **Verified end to end.** `POST /api/v1/scans` on a synthetic label returns 10 tokens with bounding boxes, all correctly read at 0.95–0.999 confidence, in ~4.0 s. Labels and values come back as *separate* tokens — which is exactly what Phase 2 spatial association needs. Error paths confirmed: unreadable image → 400 `UNREADABLE_IMAGE`, undersized → 400 `IMAGE_TOO_SMALL`, blank image → 200 `NO_TEXT_DETECTED` with a recapture message. 37 tests pass.
 
-Database schema is also applied ahead of Phase 3: `SkuScan`, `SkuScanField`, `SkuScanOcr`, `SkuMaster`, and the `SeqScanCode` sequence exist in `DmartOcr` on `MSSQL$SQLEXPRESS`. Phase 1 uses the sequence for scan codes; row persistence still belongs to Phase 3.
+Database schema is also applied ahead of Phase 3: `SkuScan`, `SkuScanField`, `SkuScanOcr`, `SkuMaster`, and the `SeqScanCode` sequence exist in `RetailOcr` on `MSSQL$SQLEXPRESS`. Phase 1 uses the sequence for scan codes; row persistence still belongs to Phase 3.
 
 **Deliverables**
 - `api/routes_health.py`, `api/routes_scans.py`
@@ -187,7 +187,7 @@ Database schema is also applied ahead of Phase 3: `SkuScan`, `SkuScanField`, `Sk
 
 ### Still required before this phase truly closes
 
-Threshold and weight tuning against **real D-Mart label images**. The current numbers are engineering defaults validated only against constructed layouts. Until then, treat the confidence figure as directionally useful, not calibrated.
+Threshold and weight tuning against **real Reliance Retail label images**. The current numbers are engineering defaults validated only against constructed layouts. Until then, treat the confidence figure as directionally useful, not calibrated.
 
 **Deliverables**
 - `services/field_extractor.py`
@@ -201,10 +201,10 @@ Threshold and weight tuning against **real D-Mart label images**. The current nu
 - `services/confidence.py` (§12) — weighted blend of OCR confidence, label-match quality, spatial quality, format validity, cross-field consistency, cross-variant agreement. Bands: `≥0.95 HIGH` / `0.80–0.95 REVIEW` / `<0.80 LOW`. Documented as engineering defaults, **not calibrated probabilities**
 - `NO_TEXT_DETECTED` status path (§22) — a valid result, not a 500
 - `sample_data/expected.json` ground truth + `tests/test_accuracy.py` producing the **field-level** accuracy table of §24 (per-field accuracy, false accepts, false rejects, no-detection rate, manual-correction rate, mean processing time)
-- **No dataset work.** PaddleOCR is used zero-shot. Extraction, normalization, and validation are unit-tested against hand-written OCR token fixtures, so the logic is fully testable before any image exists. The accuracy harness reads `sample_data/*/expected.json` and reports per bucket — it simply has nothing to score until real D-Mart images arrive
+- **No dataset work.** PaddleOCR is used zero-shot. Extraction, normalization, and validation are unit-tested against hand-written OCR token fixtures, so the logic is fully testable before any image exists. The accuracy harness reads `sample_data/*/expected.json` and reports per bucket — it simply has nothing to score until real Reliance Retail images arrive
 - Unit tests for date parsing and field extraction (explicitly required by §28)
 
-**Exit gate:** §30 first-runnable-milestone complete end-to-end on the server, plus a printed accuracy report over `sample_data/`. **Second gate, once real D-Mart images arrive (R3): re-run and tune thresholds.**
+**Exit gate:** §30 first-runnable-milestone complete end-to-end on the server, plus a printed accuracy report over `sample_data/`. **Second gate, once real Reliance Retail images arrive (R3): re-run and tune thresholds.**
 
 **Est.** 3–4 days
 
@@ -324,9 +324,9 @@ No keystore, no `signingConfig`, no absolute paths in tracked files, and the bui
 
 ### Still unverified
 
-A real D-Mart label through scan → confirm → persist. The pipeline is proven end to end; only OCR accuracy on genuine packaging remains unmeasured.
+A real Reliance Retail label through scan → confirm → persist. The pipeline is proven end to end; only OCR accuracy on genuine packaging remains unmeasured.
 
-**Deliverables** — `android/dmart-ocr/`
+**Deliverables** — `android/retail-ocr/`
 - Kotlin, Gradle wrapper, AGP 8.x + JDK 17, Compose. `targetSdk 35`, `minSdk` set to the TC22's actual API level (see Open Decisions Q1)
 - **Zebra-only device gate (§4)** — build this first, it shapes everything after it:
   - `compileOnly 'com.symbol:emdk:+'`, Zebra Maven repo declared under `dependencyResolutionManagement` in `settings.gradle`
@@ -355,7 +355,7 @@ A real D-Mart label through scan → confirm → persist. The pipeline is proven
 
 **Deliverables**
 - `interface LabelPrinter { suspend fun print(scan: ConfirmedScan): PrintResult }` (§18) — printer specifics stay behind it; OCR logic stays uncoupled from print logic
-- ZQ320-class implementation via Zebra Link-OS SDK over Bluetooth; CPCL/ZPL template per §18 (D-MART / SKU / Batch / MFG / EXP / LOT / MRP / QR)
+- ZQ320-class implementation via Zebra Link-OS SDK over Bluetooth; CPCL/ZPL template per §18 (RELIANCE RETAIL / SKU / Batch / MFG / EXP / LOT / MRP / QR)
 - `POST /api/v1/scans/{scanId}/print` + `services/print_service.py` — prepares the payload server-side (§13)
 - QR content = compact identifier (`SCAN-000001`), **not** a duplicate of all field data; backend stays source of truth (§17)
 - Printer address/config externalized (§19); printer request failures logged (§21)
@@ -444,10 +444,10 @@ Blocking phase noted. None block Phase 0–2.
 
 | # | Question | Blocks |
 | --- | --- | --- |
-| Q2 | Real D-Mart SKU label images — how many, when? English-only or mixed script? (R3, R4) | P2 accuracy gate |
+| Q2 | Real Reliance Retail SKU label images — how many, when? English-only or mixed script? (R3, R4) | P2 accuracy gate |
 | Q4 | Zebra ZSDK access, and is a ZQ320 available for testing? | P5 |
 | Q6 | HTTPS certificate — corporate CA or self-signed? Self-signed means installing trust on every TC22. | P6 |
-| Q7 | Is D-Mart product master data (`SkuMaster`, §15) available, or is that table deferred? | P3 |
+| Q7 | Is Reliance Retail product master data (`SkuMaster`, §15) available, or is that table deferred? | P3 |
 
 **Defaults applied where unanswered:** Q5 → static API key header (§19 satisfied, isolated from business logic); Q7 → table created, left empty.
 
@@ -618,7 +618,7 @@ Standing assessment of the alternatives, none installed:
 - **docTR** — Apache-2.0, and its `parseq` backbone is genuinely stronger on
   irregular text. Best of the classical set if one is tried.
 - **Surya** — **check the licence before spending any time.** It carries a
-  commercial-use revenue restriction and D-Mart is far above any small-business
+  commercial-use revenue restriction and Reliance Retail is far above any small-business
   threshold. Also CPU-slow.
 
 **Consequence for the VLM stage.** The failing regions are already localised by
@@ -639,6 +639,6 @@ replaces one 100s whole-image pass with a few small ones.
 
 This is stage one. Approaches here are engineering defaults, not commitments.
 
-When something changes — a better OCR configuration, a different extraction strategy, a scope change from D-Mart — **update `CLAUDE.md` and this file in the same change that alters the code.** Record why. A spec that drifts from the implementation is worse than no spec.
+When something changes — a better OCR configuration, a different extraction strategy, a scope change from Reliance Retail — **update `CLAUDE.md` and this file in the same change that alters the code.** Record why. A spec that drifts from the implementation is worse than no spec.
 
 `CLAUDE.md` §2 (out of scope) and §24 (accuracy goals) are the two sections to challenge first if the POC stalls.

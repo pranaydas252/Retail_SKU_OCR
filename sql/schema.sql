@@ -1,5 +1,5 @@
 /* =========================================================================
-   D-Mart SKU Label OCR — database schema
+   Reliance Retail SKU Label OCR — database schema
    Target: Microsoft SQL Server 2022 (Express is sufficient for the POC)
 
    Idempotent. Safe to run repeatedly.
@@ -16,13 +16,13 @@
    - There is one database. No separate store for OCR metadata (section 15).
    ========================================================================= */
 
-IF DB_ID(N'DmartOcr') IS NULL
+IF DB_ID(N'RetailOcr') IS NULL
 BEGIN
-    CREATE DATABASE DmartOcr;
+    CREATE DATABASE RetailOcr;
 END
 GO
 
-USE DmartOcr;
+USE RetailOcr;
 GO
 
 /* -------------------------------------------------------------------------
@@ -152,7 +152,7 @@ GO
 /* -------------------------------------------------------------------------
    SkuMaster — optional product master data (section 15).
 
-   Created empty. D-Mart master data availability is still open (PLAN.md Q7).
+   Created empty. Reliance Retail master data availability is still open (PLAN.md Q7).
    Useful later for product context and barcode/GTIN matching.
    ------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.SkuMaster', N'U') IS NULL

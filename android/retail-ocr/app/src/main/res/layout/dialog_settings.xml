@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Site configuration.
+
+    Two values, both of which change per store and neither of which anyone is
+    going to rebuild an APK to set: the backend address and the printer's
+    Bluetooth MAC.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="4dp">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/serverLayout"
+        style="@style/Widget.RetailOcr.TextInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/settings_server_hint"
+        app:hintTextColor="@color/text_secondary">
+
+        <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.RetailOcr.TextInput.Edit"
+            android:id="@+id/serverInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri"
+            android:textColor="@color/text_primary" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/settings_server_help"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textSize="12sp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/printerLayout"
+        style="@style/Widget.RetailOcr.TextInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:hint="@string/settings_printer_hint"
+        app:hintTextColor="@color/text_secondary">
+
+        <com.google.android.material.textfield.TextInputEditText
+            style="@style/Widget.RetailOcr.TextInput.Edit"
+            android:id="@+id/printerInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789ABCDEFabcdef:"
+            android:inputType="textCapCharacters"
+            android:maxLength="17"
+            android:textColor="@color/text_primary" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/settings_printer_help"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textSize="12sp" />
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/sampleModeSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:text="@string/settings_sample_mode"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:visibility="gone"
+        android:text="@string/settings_sample_mode_help"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textSize="12sp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/testPrintButton"
+        style="@style/Widget.RetailOcr.Button.Outlined"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:visibility="gone"
+        android:text="@string/settings_test_print"
+        android:textColor="@color/brand_cyan"
+        app:cornerRadius="14dp"
+        app:strokeColor="@color/outline_strong" />
+
+    <TextView
+        android:id="@+id/testPrintResult"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+</LinearLayout>
+
+</ScrollView>

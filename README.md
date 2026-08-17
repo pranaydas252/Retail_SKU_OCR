@@ -1,6 +1,6 @@
 # Retail SKU OCR
 
-Server-backed SKU/product label OCR for D-Mart.
+Server-backed SKU/product label OCR for Reliance Retail.
 
 A Zebra TC22 captures a product label, a Windows-hosted FastAPI service extracts the printed fields with PaddleOCR on CPU, the operator confirms or corrects the values, the result is stored in SQL Server, and a Zebra ZQ320 prints a label carrying a 10 mm × 10 mm QR code.
 
@@ -26,7 +26,7 @@ The **backend lives at the repository root**. The Android project lives in `andr
 ├── sample_data/           # Test images + ground truth
 ├── sql/                   # Schema and seed
 ├── deployment/iis/        # Windows Server deployment
-└── android/dmart-ocr/     # Kotlin Android app
+└── android/retail-ocr/     # Kotlin Android app
 ```
 
 ---
@@ -152,12 +152,12 @@ Latency scales with the **number of detected text regions**, not image size: 4.6
 ## Android setup
 
 ```text
-android/dmart-ocr/
+android/retail-ocr/
 ```
 
 Open in Android Studio. Requires JDK 17. Gradle wrapper is committed — no system Gradle needed.
 
-The Zebra ZSDK (Link-OS) AAR is not on Maven Central. Place it in `android/dmart-ocr/app/libs/` — it is git-ignored.
+The Zebra ZSDK (Link-OS) AAR is not on Maven Central. Place it in `android/retail-ocr/app/libs/` — it is git-ignored.
 
 Set the backend base URL and API key in `local.properties` or via build config. Never hard-code them.
 
@@ -180,7 +180,7 @@ Three things have to line up, and the failure looks identical for all three — 
 3. **Open the port inbound.** Windows Firewall blocks 8000 by default. From an **elevated** prompt:
 
    ```powershell
-   New-NetFirewallRule -DisplayName "D-Mart OCR backend" `
+   New-NetFirewallRule -DisplayName "Reliance Retail OCR backend" `
      -Direction Inbound -Protocol TCP -LocalPort 8000 `
      -Action Allow -Profile Private
    ```

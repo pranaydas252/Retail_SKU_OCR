@@ -1,8 +1,8 @@
-# CLAUDE.md — D-Mart SKU Label OCR Application
+# CLAUDE.md — Reliance Retail SKU Label OCR Application
 
 ## 1. Project Overview
 
-Build a server-backed Android application for D-Mart that captures images of SKU/product labels using a Zebra TC22, sends the image to a Windows server, extracts printed label information using CPU-based OCR, returns structured data to the Android app for operator confirmation, stores the confirmed data in Microsoft SQL Server, and prints a QR code/label using a Zebra ZQ320-class mobile printer.
+Build a server-backed Android application for Reliance Retail that captures images of SKU/product labels using a Zebra TC22, sends the image to a Windows server, extracts printed label information using CPU-based OCR, returns structured data to the Android app for operator confirmation, stores the confirmed data in Microsoft SQL Server, and prints a QR code/label using a Zebra ZQ320-class mobile printer.
 
 This is an R&D/POC implementation intended to demonstrate the complete end-to-end workflow.
 
@@ -530,7 +530,7 @@ Consequences, and they are binding:
   that works to fix a recogniser that does not. If an alternative is tried, try
   it as a **recogniser only**, on the boxes PP-OCRv5 already flagged as bad.
 - **Check Surya's licence before spending time on it.** It carries a
-  commercial-use revenue restriction that D-Mart is far above.
+  commercial-use revenue restriction that Reliance Retail is far above.
 - **Feed the VLM per-box crops at native resolution**, not the whole image at
   `vlm_max_side`. The detector has already localised the hard regions.
 
@@ -718,7 +718,7 @@ These are starting rules only. Keep them configurable and easy to extend. They l
 
 ### Product scope
 
-D-Mart SKU means the **full retail range** — snacks (Lays, Pringles), detergents (Surf Excel), packaged foods, household goods, personal care. Do not tune the extractor around one category.
+Reliance Retail SKU means the **full retail range** — snacks (Lays, Pringles), detergents (Surf Excel), packaged foods, household goods, personal care. Do not tune the extractor around one category.
 
 Practical consequences:
 
@@ -1051,7 +1051,7 @@ CreatedAt           datetime2
 
 ### Optional `SkuMaster`
 
-If D-Mart provides product master data, support:
+If Reliance Retail provides product master data, support:
 
 ```text
 Id
@@ -1196,7 +1196,7 @@ Keep the print template simple for the POC.
 Suggested contents:
 
 ```text
-D-MART
+RELIANCE RETAIL
 Product/SKU
 Batch
 MFG
@@ -1393,7 +1393,7 @@ A wrong expiry date is more serious than a recapture request. Prefer safe review
 
 ## 25. R&D Test Data
 
-For the immediate POC, use a small collection of real representative D-Mart SKU-label images.
+For the immediate POC, use a small collection of real representative Reliance Retail SKU-label images.
 
 Do not build a model-training dataset as part of this scope.
 
@@ -1432,11 +1432,11 @@ Example:
 
 **Do not curate or download public datasets for this build.**
 
-PaddleOCR is used zero-shot: no fine-tuning, no training data, no dataset engineering. Point the pipeline at real D-Mart label images and measure what it does out of the box.
+PaddleOCR is used zero-shot: no fine-tuning, no training data, no dataset engineering. Point the pipeline at real Reliance Retail label images and measure what it does out of the box.
 
 Rationale: PP-OCRv5 is already a strong general recognizer. The project's variable is the **extraction and normalization logic layered on top of it**, not the OCR model itself. Building a dataset pipeline before knowing where PaddleOCR actually fails would be effort spent on the wrong layer.
 
-Consequence, accepted: until real D-Mart images exist, there is no accuracy gate to run. Phase 2 logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. The `sample_data/` bucket structure and ground-truth format stay in place, ready to be filled.
+Consequence, accepted: until real Reliance Retail images exist, there is no accuracy gate to run. Phase 2 logic is built and unit-tested against hand-written token fixtures; the accuracy number arrives with the images. The `sample_data/` bucket structure and ground-truth format stay in place, ready to be filled.
 
 If zero-shot recognition turns out to be the bottleneck — rather than extraction — revisit this decision and record the pivot per section 1.
 
@@ -1572,7 +1572,7 @@ project-root/                 <- git root, backend root
 ├── deployment/
 │   └── iis/
 └── android/                  <- Android Gradle project root
-    └── dmart-ocr/
+    └── retail-ocr/
 ```
 
 Keep Android and backend code clearly separated. Nothing under `android/` may import backend code, and nothing in `app/` may reference Android paths.

@@ -1,0 +1,26 @@
+# Copy to local.properties and adjust. local.properties is git-ignored because
+# it is machine-specific; nothing here may be committed (CLAUDE.md section 19).
+
+# Android SDK location on THIS machine.
+#
+# Use FORWARD SLASHES. A .properties file treats a single backslash as an
+# escape character, so C:\Users\... silently collapses to C:Users... and the
+# build fails with a bare "Invalid file path". Backslashes must be doubled
+# (C:\\Users\\...) if you insist on them.
+#
+#   Windows: C:/Users/<you>/AppData/Local/Android/Sdk
+#   macOS:   /Users/<you>/Library/Android/sdk
+#   Linux:   /home/<you>/Android/Sdk
+#
+# Android Studio writes this automatically the first time it opens the
+# project, so it can usually be left out entirely.
+sdk.dir=
+
+# Backend endpoint. Both settings have build defaults, so the project compiles
+# from a fresh clone without this file existing at all.
+#   10.0.2.2  -> emulator's route to the host machine
+#   LAN IP    -> a real TC22 on the same network, e.g. http://192.168.1.50:8000/
+retail.backendUrl=http://10.0.2.2:8000/
+
+# Leave empty when the backend has no API_KEY configured.
+retail.apiKey=

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One editable field on the confirmation screen, sized for a half-width cell.
+
+    Three single-line rows: caption, value, note. That is the whole design, and
+    it is what fixes the two problems the previous version had at once.
+
+    The caption used to be forced to two lines so that "Manufacturing date"
+    would fit, which meant "MRP" carried a blank line under it and the value sat
+    marooned in the middle of the card. It also made the confidence dot
+    impossible to align — centred vertically it fell between the caption's two
+    lines, and pinned to the top it needed a magic margin that only looked right
+    for one of the labels.
+
+    The fix was upstream, in what the server calls these fields. They are now
+    named the way the pack names them — BATCH, MFG, EXP, LOT, MRP — so every
+    caption is one short line, the dot centres against it with no arithmetic,
+    and the value follows immediately. It also means the operator reads the same
+    word on the screen, on the pack, and on the printed label.
+
+    The note keeps its line whether or not it has something to say. Collapsing
+    it made card height a function of how well each field happened to be read,
+    which turned a grid of four into a staircase. INVISIBLE holds the row; the
+    cards are then identical by construction rather than by a hard-coded dp.
+-->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/outline"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <!-- gravity=center_vertical is all the dot alignment needs, now that
+             the caption beside it is exactly one line. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/bandDot"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
+                android:layout_marginEnd="7dp"
+                android:background="@drawable/dot_high" />
+
+            <TextView
+                android:id="@+id/fieldLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textAppearance="@style/TextAppearance.RetailOcr.FieldKey"
+                tools:text="BATCH" />
+
+            <!-- Only shown for rows the operator added themselves. -->
+            <ImageView
+                android:id="@+id/removeButton"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="-5dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/result_remove_field"
+                android:padding="6dp"
+                android:src="@drawable/ic_close"
+                android:visibility="gone"
+                app:tint="@color/text_tertiary"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <!--
+            The value is the one thing on this card the operator is actually
+            reading, so it is the only element allowed to be large.
+
+            Single line, and no textMultiLine: every value here is short by
+            nature — a date, a price, a batch code — so wrapping was only ever
+            reachable by a bad read, and letting a bad read stretch its card is
+            the wrong response to it. A long one scrolls while being edited.
+        -->
+        <EditText
+            android:id="@+id/fieldValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@null"
+            android:hint="@string/result_not_found"
+            android:importantForAutofill="no"
+            android:includeFontPadding="false"
+            android:inputType="textCapCharacters"
+            android:maxLines="1"
+            android:minHeight="0dp"
+            android:paddingVertical="0dp"
+            android:textAppearance="@style/TextAppearance.RetailOcr.Value"
+            android:textColorHint="@color/text_tertiary"
+            tools:text="GSB0134" />
+
+        <!-- Says WHY a value is doubtful. A band with no reason only tells the
+             operator to worry; this tells them what to look at. -->
+        <TextView
+            android:id="@+id/fieldNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.RetailOcr.FieldNote"
+            android:visibility="invisible"
+            tools:text="Check against pack"
+            tools:visibility="visible" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

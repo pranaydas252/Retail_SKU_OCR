@@ -1,6 +1,6 @@
 # Sample Data
 
-Real D-Mart SKU label images and their ground truth. **Image binaries are
+Real Reliance Retail SKU label images and their ground truth. **Image binaries are
 git-ignored** — only this file, the folder structure, and the ground-truth JSON
 are tracked.
 
@@ -39,7 +39,7 @@ saved to the device instead of being uploaded, and the camera stays put between
 shots so a shelf can be worked through in one pass.
 
 ```bat
-adb pull /sdcard/Android/data/com.markss.dmartocr/files/Pictures/samples sample_data\roi
+adb pull /sdcard/Android/data/com.markss.retailocr/files/Pictures/samples sample_data\roi
 python scripts\scaffold_ground_truth.py
 ```
 
