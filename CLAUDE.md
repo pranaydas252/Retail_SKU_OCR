@@ -100,17 +100,33 @@ comparing its output to PP-OCRv5's garbage rather than to the pack. Under
 section 24 a confidently wrong value is worse than a missing one, so this is a
 reason to change engine rather than to tune around it.
 
-The current model is therefore **`qwen3-vl:4b`**, a generation newer and
-unmeasured on this corpus. Whether it is better is an open question, not a
-claim — see `PLAN.md` F1.
+The current model is **`qwen3-vl:4b-instruct`**. The `-instruct` suffix is load
+bearing: the plain `qwen3-vl:4b` tag is the Thinking variant, which puts every
+token in the `thinking` field, returns an empty `response`, and ignores
+`think: false` on both Ollama endpoints.
+
+**Measured 2026-08-17 on the 20-image gated corpus**, scored through the same
+ground truth and the same scorer as the primary engine:
+
+| engine | core | codes | wrong | missed | false accepts | per image |
+| --- | --- | --- | --- | --- | --- | --- |
+| PP-OCRv5 + rules | 51% | 41% | 7 | 29 | 0 | 6.1s |
+| `qwen3-vl:4b-instruct` alone | **70%** | **65%** | 18 | 4 | **2** | 94.6s |
 
 Rules that still apply:
 
-- It is a **second engine, not a replacement.** PP-OCRv5 remains the primary.
 - Its output goes through the **same** extraction, normalization, validation and
   confidence path, so its accuracy is directly comparable.
-- It stays **off by default** until measured against a corpus.
+- It stays **off by default** until the failure profile below is handled.
 - Everything else on the excluded list above stays excluded.
+
+**"A second engine, not a replacement" is now under review.** The VLM alone
+beats the full PP-OCRv5 pipeline by 19 points on core and 24 on codes, which is
+the opposite of what this section assumed. But it does so by never declining:
+4 missed against 29, and it produced this project's first two false accepts.
+That trade is not free under section 24, where a wrong value outranks a missing
+one, so before the VLM can carry a field on its own a VLM-only value must be
+capped into the REVIEW band rather than presented as HIGH.
 
 GPU inference, cloud APIs and any training or fine-tuning remain out of scope.
 

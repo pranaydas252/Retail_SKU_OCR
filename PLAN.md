@@ -527,6 +527,28 @@ no PP-OCRv5 anywhere in the path — beats the shipping pipeline outright:
 | PP-OCRv5 + rules | 44% | 17% | 1 | 13 | 6s |
 | `qwen3-vl:4b-instruct` alone, JSON mode | **62%** | **67%** | 8 | **0** | 112s |
 
+**Confirmed on the full 20-image corpus**, so it is not an artifact of six
+easy packs:
+
+| engine | core | codes | correct | wrong | missed | false accepts | per image |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PP-OCRv5 + rules | 51% | 41% | 34 | 7 | 29 | 0 | 6.1s |
+| `qwen3-vl:4b-instruct` alone | **70%** | **65%** | 48 | 18 | 4 | **2** | 94.6s |
+
+Per field, the VLM: mrp 82%, batch 69%, expiry 65%, mfd 63%. It is better than
+the shipping pipeline on **every** field, and the weakest field is no longer a
+code — it is a date.
+
+The two false accepts are worth naming because they are different faults:
+
+- `195914_873` batch `K11016A1` — not fabricated. That string is the pack's
+  **lot** code, which the model filed under batch. A field-assignment error.
+- `200214_286` lot `202` — fabricated outright.
+
+Only the second is invention. The first says the JSON prompt does not
+distinguish batch from lot clearly enough, which is a prompt problem and
+therefore cheap to attack.
+
 Two cautions attach to that, and neither is small:
 
 - **It never declines.** Zero missed against thirteen. Every field gets an
