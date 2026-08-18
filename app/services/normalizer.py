@@ -144,6 +144,20 @@ _SLASH_AS_DIGIT_DMY = re.compile(r"^(\d{2})([17])(\d{2})\2(\d{2}|\d{4})$")
 #:
 #: The year must be four digits and this century. A two-digit year would make
 #: the pattern five characters long and match far too much.
+#: The same failure on only ONE of the two separators.
+#:
+#: Measured: a pack printing "27/06/2026" came back as "27/0672026" - the first
+#: slash survived and the second became a 7. The rule above cannot see that,
+#: because it requires both separators to be the SAME misread character.
+#:
+#: A real separator must survive, and that requirement is what keeps this safe.
+#: Dropping it would match "2710672026", which is equally a phone number and a
+#: date with nothing in the digits to say which. One surviving slash is the
+#: evidence that a date was printed there at all.
+_SLASH_PARTLY_READ_AS_DIGIT = re.compile(
+    r"^(\d{1,2})(?:([/.\-])(\d{1,2})([17])|([17])(\d{1,2})([/.\-]))(\d{2}|\d{4})$"
+)
+
 _SLASH_AS_DIGIT_MY = re.compile(r"^(\d{2})([17])(\d{4})$")
 
 #: A complete day-month-year date, wherever it sits in a noisy token.
@@ -173,6 +187,14 @@ def _repair_slash_read_as_digit(text: str) -> str:
     if match:
         day, _, month, year = match.groups()
         if 1 <= int(day) <= 31 and 1 <= int(month) <= 12:
+            return f"{day}/{month}/{year}"
+        return text
+
+    match = _SLASH_PARTLY_READ_AS_DIGIT.match(text)
+    if match:
+        day, _, month_a, _, _, month_b, _, year = match.groups()
+        month = month_a or month_b
+        if month and 1 <= int(day) <= 31 and 1 <= int(month) <= 12:
             return f"{day}/{month}/{year}"
         return text
 

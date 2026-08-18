@@ -769,6 +769,18 @@ def _infer_unlabelled(
             dates.append((normalized.value, raw, token))
             date_spans.append(match.span())
 
+        # And the whole token, for a date whose separator was recognised as a
+        # digit. _DATE_TOKEN requires a separator to have survived in the
+        # printed text, so on "27/0672026" it finds nothing and the pack looks
+        # like it carries ONE date - which made the manufacturing date take the
+        # Use By value and left the mangled token free to be adopted as a batch
+        # code. Times are excluded: "13:02:38" reads as a valid 2038 date.
+        if not date_spans and ":" not in without_unit:
+            whole = normalizer.normalize_date(without_unit, "day")
+            if whole.ok and _plausible_pack_date(whole.value):
+                dates.append((whole.value, without_unit, token))
+                date_spans.append((0, len(without_unit)))
+
         for match in _PRICE_TOKEN.finditer(without_unit):
             value = (
                 match.group("marked")
@@ -867,9 +879,23 @@ def _infer_unlabelled(
 #: is prose and a very long digit run is a phone number, a licence or a GTIN.
 _STAMP_CODE = re.compile(r"^(?=.*[0-9])[A-Z0-9][A-Z0-9\-/]{3,15}$", re.IGNORECASE)
 
+#: A measured quantity, which is code-shaped and never a code. "100g" passes
+#: the pattern above - four characters, contains a digit - and was adopted as
+#: the batch number on a pack that prints none. Net weight sits near the stamp
+#: on most packs, so this is not a rare collision.
+_QUANTITY = re.compile(
+    r"^\d+(?:\.\d+)?\s*(?:G|GM|GMS|GRAMS?|KG|MG|ML|LTR|L|N|PCS?|NOS?)$",
+    re.IGNORECASE,
+)
+
 #: How far from the date, in multiples of the date token's own height, a batch
 #: code can sit and still belong to the same stamp.
 _STAMP_PROXIMITY = 2.5
+
+
+def _horizontal_gap(left: OcrToken, right: OcrToken) -> float:
+    """Pixels between two boxes horizontally; zero when they overlap."""
+    return max(0, max(left.x, right.x) - min(left.right, right.right))
 
 
 def _infer_stamp_batch(
@@ -938,7 +964,16 @@ def _infer_stamp_batch(
         if _canonical(candidate) in _BOILERPLATE or _canonical(candidate) in all_aliases:
             return None
         # A date, a time or a price is not a batch code.
+        #
+        # Checked by NORMALIZING rather than by pattern. "27/0672026" is a date
+        # with one separator misread, which _DATE_TOKEN does not match, and it
+        # was adopted as a batch number on a pack that prints none.
         if _DATE_TOKEN.search(candidate) or ":" in candidate:
+            return None
+        as_date = normalizer.normalize_date(candidate, "day")
+        if as_date.ok and _plausible_pack_date(as_date.value):
+            return None
+        if _QUANTITY.match(candidate):
             return None
         if _MONEY_MENTION.search(candidate):
             return None
@@ -973,6 +1008,13 @@ def _infer_stamp_batch(
             if token is not date_token
             and id(token) not in claimed
             and abs(_centre_y(token) - _centre_y(date_token)) <= reach
+            # Near horizontally as well as vertically. "Printed with the date"
+            # means beside it, not merely somewhere on the same row of a label
+            # that spans the whole pack: on one capture the address fragment
+            # "than-301019" sat at x=0 while the stamp was at x=482, shared a
+            # row, and was adopted as the batch number for a pack that prints
+            # none.
+            and _horizontal_gap(token, date_token) <= reach
         ),
         key=lambda token: abs(_centre_y(token) - _centre_y(date_token)),
     )
@@ -1137,10 +1179,13 @@ def _with_dropped_prefix(
     line is eligible, so this cannot reach across a column or pick up the tail
     of a neighbouring field.
     """
+    # Starts to the left, rather than ENDS before the candidate starts, for the
+    # same overlap reason as above: "M2" runs to x=523 and the code beside it
+    # starts at 506.
     preceding = [
         token for token in tokens
         if token is not candidate
-        and token.right <= candidate.x
+        and token.x < candidate.x
         and token.x >= label.right
         and _same_line(candidate, token)
         and len(_canonical(token.text)) <= _MAX_DROPPED_PREFIX
@@ -1149,10 +1194,52 @@ def _with_dropped_prefix(
     if not preceding:
         return text
 
-    nearest = max(preceding, key=lambda token: token.right)
+    nearest = max(preceding, key=lambda token: token.x)
     if candidate.x - nearest.right > max(candidate.height, 1) * _PREFIX_REACH:
         return text
     return f"{nearest.text} {text}"
+
+
+def _unit_price_split_across_tokens(
+    tokens: list[OcrToken], candidate: OcrToken
+) -> bool:
+    """Is this number the price of a gram rather than of the pack?
+
+    The per-unit guard works on one token, because the recogniser usually
+    returns "0.30/g" or "72.12 per" whole. When it splits the number from its
+    unit the guard cannot see the unit at all, and the unit price becomes the
+    most price-shaped thing on the label.
+
+    Measured on two captures of the SAME pack: the first returned "72.12 per"
+    as one token and the guard held; the second returned "2.12" and "per g"
+    separately - having also lost the leading 7 - and the extractor reported an
+    MRP of 2.12 for a pack marked 85.00.
+
+    Judged by joining the candidate to its right-hand neighbour and applying
+    the existing per-unit rule, so there is one definition of what a unit price
+    looks like rather than two that can drift apart.
+    """
+    # Starts to the right, rather than starts after the candidate ENDS.
+    # Detection boxes on dense print overlap by a few pixels - measured, "2.12"
+    # runs to x=602 and the "per g" beside it starts at 587 - so demanding a
+    # clean gap found no neighbour at all and the guard never fired.
+    following = [
+        token for token in tokens
+        if token is not candidate
+        and token.x > candidate.x
+        and _same_line(candidate, token)
+    ]
+    # Every near neighbour, not just the closest one. The closest is not
+    # reliably the unit: a taller box on the row below widens the same-line
+    # tolerance enough to be included, and on this pack the date "27/0672026"
+    # sorted ahead of the "per g" that actually completes the unit price.
+    reach = max(candidate.height, 1) * _PREFIX_REACH
+    for token in sorted(following, key=lambda t: t.x):
+        if token.x - candidate.right > reach:
+            break
+        if _PER_UNIT.search(f"{candidate.text} {token.text}"):
+            return True
+    return False
 
 
 def _best_neighbour(
@@ -1178,6 +1265,11 @@ def _best_neighbour(
                 continue
 
         if not _is_plausible(candidate.text, spec.value_type, all_aliases):
+            continue
+
+        if spec.value_type == "currency" and _unit_price_split_across_tokens(
+            tokens, candidate
+        ):
             continue
 
         text = candidate.text

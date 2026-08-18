@@ -632,3 +632,74 @@ class TestStampBatchSurvivesALabelledDate:
         ])
 
         assert fields["batchNumber"].normalized.value == "RC-DS5720"
+
+
+class TestScan307:
+    """A second capture of the pack behind TestScan196, read worse.
+
+    Same product, and the recogniser returned "27/0672026" for the date and
+    split "2.12" from its "per g". Everything that broke here was invisible on
+    the cleaner capture, which is the point of keeping both.
+    """
+
+    def tokens(self):
+        raw = [
+            ("NetWt.:", 260, 56, 106, 38), ("40g", 406, 55, 71, 39),
+            ("85.00", 608, 66, 110, 35),
+            ("2.12", 475, 102, 127, 35), ("per g", 587, 102, 138, 37),
+            ("MRP(incl.ofalltaxes)", 261, 107, 214, 35),
+            ("Unit Sale Price", 264, 134, 130, 32),
+            ("27/0672026", 509, 133, 219, 47),
+            ("Date of Mfg:", 265, 161, 106, 30),
+            ("24/12/2026", 510, 172, 222, 46),
+            ("Use By:", 268, 190, 66, 28),
+            ("ZX2626PZAB", 506, 211, 225, 39),
+            ("Lot No.:", 271, 217, 61, 24), ("M2", 453, 219, 70, 29),
+        ]
+        return [token(t, x, y, w, h) for t, x, y, w, h in raw]
+
+    def test_a_date_with_one_misread_separator_still_parses(self):
+        # "27/06/2026" came back as "27/0672026". The repair rule required BOTH
+        # separators to be the same misread character, so it saw nothing, the
+        # pack looked like it carried one date, and the manufacturing date took
+        # the Use By value.
+        fields = extract_fields(self.tokens())
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-27"
+        assert fields["expiryDate"].normalized.value == "2026-12-24"
+
+    def test_a_unit_price_split_from_its_unit_is_not_the_mrp(self):
+        # "2.12" and "per g" arrived as separate tokens, so the per-unit guard
+        # could not see the unit and the cheapest number on the label became
+        # the price of the pack.
+        fields = extract_fields(self.tokens())
+
+        assert fields["mrp"].normalized.value == "85.00"
+
+    def test_a_mangled_date_is_not_adopted_as_a_batch(self):
+        fields = extract_fields(self.tokens())
+
+        assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
+
+
+class TestStampBatchRejections:
+    def test_a_quantity_is_not_a_batch_code(self):
+        # "100g" is four characters and contains a digit, so it passes the
+        # stamp-code pattern. Net weight sits near the stamp on most packs.
+        fields = extract_fields([
+            token("100g", 480, 60, 90, 30),
+            token("16/06/2026", 482, 100, 210, 40),
+        ])
+
+        assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
+
+    def test_a_code_far_across_the_label_is_not_part_of_the_stamp(self):
+        # An address tail at the left edge shared a row with a stamp on the
+        # right and was adopted as its batch number. Proximity means beside,
+        # not merely on the same row of a pack-wide label.
+        fields = extract_fields([
+            token("than-301019", 0, 136, 158, 62),
+            token("16/06/2026", 482, 142, 211, 62),
+        ])
+
+        assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
