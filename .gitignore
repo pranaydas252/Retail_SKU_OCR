@@ -176,3 +176,4 @@ $RECYCLE.BIN/
 
 # Measurement output — regenerated per run, not source
 ensemble_results.json
+.cache/
