@@ -475,7 +475,21 @@ def normalize_code(raw: str) -> NormalizedValue:
             break
         text = stripped
 
-    cleaned = re.sub(r"[^A-Z0-9\-/]", "", text).strip("-/")
+    # Internal spacing is kept, because it is printed.
+    #
+    # A pack reading "Lot No.: M2 ZX2626PZAB" was stored and printed as
+    # "M2ZX2626PZAB", so the label in the operator's hand and the label coming
+    # out of the printer disagreed about the code. The operator is checking one
+    # against the other; making them differ is the one thing this value must
+    # not do.
+    #
+    # Safe because nothing downstream compares codes literally. Engine
+    # agreement (ensemble.same_value) and the accuracy harness both compare
+    # alphanumeric skeletons, so a space can neither manufacture a
+    # disagreement nor fail a match. Runs are collapsed and the ends trimmed,
+    # so a stray recognition space cannot pad the value.
+    cleaned = re.sub(r"[^A-Z0-9\-/ ]", "", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -/")
 
     if not cleaned:
         return NormalizedValue(None, notes=["no alphanumeric content"])

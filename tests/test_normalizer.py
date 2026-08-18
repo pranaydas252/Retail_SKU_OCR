@@ -293,3 +293,30 @@ class TestAddPeriod:
 
     def test_adds_days_when_day_is_known(self):
         assert normalizer.add_period("2026-03-01", 30, "DAY") == "2026-03-31"
+
+
+class TestCodeSpacing:
+    """Codes keep the spacing the pack prints (CLAUDE.md section 10).
+
+    A pack reading "Lot No.: M2 ZX2626PZAB" was stored and printed as
+    "M2ZX2626PZAB", so the label in the operator's hand and the label out of
+    the printer disagreed about the code they were meant to check against each
+    other.
+
+    Nothing downstream compares codes literally — engine agreement and the
+    accuracy harness both compare alphanumeric skeletons — so a space can
+    neither manufacture a disagreement nor fail a match.
+    """
+
+    def test_internal_spacing_survives(self):
+        assert normalizer.normalize_code("M2 ZX2626PZAB").value == "M2 ZX2626PZAB"
+
+    def test_a_label_prefix_is_still_removed(self):
+        assert normalizer.normalize_code("Lot No.: M2 ZX2626PZAB").value == "M2 ZX2626PZAB"
+
+    def test_runs_and_edges_are_tidied(self):
+        # A stray recognition space must not pad the value or double inside it.
+        assert normalizer.normalize_code("   A23   C91  ").value == "A23 C91"
+
+    def test_an_unspaced_code_is_unchanged(self):
+        assert normalizer.normalize_code("A23C91").value == "A23C91"

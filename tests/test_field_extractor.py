@@ -601,9 +601,14 @@ class TestScan196:
         # "M2 ZX2626PZAB" arrives as two tokens and "M2" has too few
         # alphanumerics to pass the code gate, so the extractor skipped it and
         # reported a truncated lot that looked entirely reasonable.
+        #
+        # The space is preserved, because it is printed. The operator checks
+        # the screen and the printed label against the pack, and a code that
+        # renders differently from the one in their hand is the one thing this
+        # value must not do.
         fields = extract_fields(self.tokens())
 
-        assert fields["lotCode"].normalized.value == "M2ZX2626PZAB"
+        assert fields["lotCode"].normalized.value == "M2 ZX2626PZAB"
 
     def test_the_lot_is_not_also_reported_as_the_batch(self):
         # The pack prints no batch. Stamp inference found a code beside a date —
