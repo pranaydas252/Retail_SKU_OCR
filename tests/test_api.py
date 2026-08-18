@@ -280,3 +280,42 @@ class TestContestedFieldsReachTheApp:
 
         assert field["conflictValue"] is None
         assert sorted(field["engines"]) == ["OCR", "VLM"]
+
+
+class TestHealthReportsTheSecondEngine:
+    """A stopped Ollama must be visible somewhere.
+
+    The scan path swallows a VLM failure so one bad call cannot cost an
+    operator a scan. Across a shift that becomes a silent downgrade: with the
+    trigger set to "always", every scan quietly runs single-engine and the
+    device cannot tell, because a missing contested-field chip looks exactly
+    like the two engines agreeing.
+    """
+
+    def test_health_says_when_the_vlm_is_off(self, client):
+        body = client.get("/api/v1/health").json()
+
+        assert body["status"] == "UP"
+        assert body["vlmEnabled"] is False
+        assert body["vlmReady"] is False
+        assert body["vlmModel"] is None
+
+    def test_enabled_but_unreachable_is_not_ready(self, client, monkeypatch):
+        from app.api import routes_health
+
+        settings = routes_health.get_settings().model_copy(
+            update={"vlm_enabled": True, "vlm_model": "qwen3-vl:4b-instruct"}
+        )
+        monkeypatch.setattr(routes_health, "get_settings", lambda: settings)
+
+        class Unreachable:
+            def is_available(self):
+                return False
+
+        monkeypatch.setattr(routes_health, "get_vlm_service", lambda: Unreachable())
+
+        body = client.get("/api/v1/health").json()
+
+        assert body["vlmEnabled"] is True, "configuration is reported as configured"
+        assert body["vlmReady"] is False, "but it cannot actually be reached"
+        assert body["vlmModel"] == "qwen3-vl:4b-instruct"

@@ -193,4 +193,18 @@ class HealthResponse(BaseModel):
     detection_model: str | None = Field(default=None, alias="detectionModel")
     recognition_model: str | None = Field(default=None, alias="recognitionModel")
 
+    #: Whether the second engine is configured to run at all.
+    vlm_enabled: bool = Field(default=False, alias="vlmEnabled")
+
+    #: Whether it can actually be reached right now.
+    #:
+    #: Separate from vlm_enabled on purpose. A VLM failure is swallowed so a
+    #: scan still returns the primary engine's result, which is the right
+    #: behaviour for one scan and a silent downgrade across a shift: with the
+    #: trigger set to "always", the absence of a contested field means either
+    #: that the engines agreed or that only one of them ran, and nothing on the
+    #: screen distinguishes those. This is where that distinction lives.
+    vlm_ready: bool = Field(default=False, alias="vlmReady")
+    vlm_model: str | None = Field(default=None, alias="vlmModel")
+
     model_config = {"populate_by_name": True}
