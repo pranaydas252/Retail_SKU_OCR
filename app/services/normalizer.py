@@ -50,6 +50,14 @@ _MONTH_NAMES = {
 # scope, so a pivot window would add ambiguity without buying anything.
 _CENTURY = 2000
 
+#: Any month name or abbreviation, longest first so "JANUARY" wins over "JAN".
+#: Exported because the extractor needs to tell a date wrapped in letters from a
+#: code that merely contains digits.
+MONTH_NAME_PATTERN = re.compile(
+    "|".join(sorted((re.escape(n) for n in _MONTH_NAMES), key=len, reverse=True)),
+    re.IGNORECASE,
+)
+
 # Output format of this module, recognized on input so normalization is
 # idempotent.
 _ISO_INPUT = re.compile(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$")
@@ -278,11 +286,15 @@ def normalize_date(raw: str, precision: str = "month") -> NormalizedValue:
 
 def _try_named_month(text: str) -> NormalizedValue | None:
     """Handle 'JAN 2026', 'JAN26', '12 MAR 2026'."""
-    match = re.search(r"([A-Z]{3,9})", text)
-    if not match:
-        return None
-
-    month = _month_from_name(match.group(1))
+    # Every alphabetic run, not just the first. Indian packs print
+    # "Mfg.Month&Year:JAN.2025", where the first run is "MONTH" and the month
+    # name is the second - giving up on the first run reported no date at all
+    # for a pack that states it plainly.
+    month = None
+    for candidate in re.findall(r"([A-Z]{3,9})", text):
+        month = _month_from_name(candidate)
+        if month is not None:
+            break
     if month is None:
         return None
 

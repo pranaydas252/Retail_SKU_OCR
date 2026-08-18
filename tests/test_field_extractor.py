@@ -703,3 +703,63 @@ class TestStampBatchRejections:
         ])
 
         assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
+
+
+class TestScan426:
+    """A third capture of the same pack, read differently again.
+
+    PP-OCRv5 returned "per" with the unit lost, did not detect the "M2" prefix
+    at all, and read a side-of-pack code as "XXXXXCCFXX0925".
+    """
+
+    def tokens(self):
+        raw = [
+            ("Net Wt.:", 247, 54, 105, 37), ("40g", 393, 49, 68, 37),
+            ("85.00", 593, 51, 116, 43),
+            ("2.12", 462, 91, 126, 38), ("per", 593, 93, 104, 34),
+            ("MRP (incl.ofalltaxes)", 247, 98, 213, 41),
+            ("27/0672026", 495, 123, 221, 48),
+            ("Unit Sale Price", 248, 128, 132, 35),
+            ("Date ofMfg:", 250, 154, 107, 35),
+            ("24/12/2026", 498, 163, 222, 47),
+            ("Use By:", 250, 183, 70, 33),
+            ("ZX2626PZAB", 502, 205, 218, 36),
+            ("Lot No.:", 253, 209, 65, 32),
+            ("XXXXXCCFXX0925", 141, 227, 55, 174),
+            ("19080131479436", 233, 354, 427, 44),
+        ]
+        return [token(t, x, y, w, h) for t, x, y, w, h in raw]
+
+    def test_a_side_of_pack_code_is_not_a_manufacturing_date(self):
+        # _single_part_date strips letters and reads whatever digits remain, so
+        # "XXXXXCCFXX0925" became September 2025 on a pack marked June 2026.
+        fields = extract_fields(self.tokens())
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-27"
+
+    def test_a_barcode_number_is_not_a_batch_code(self):
+        # The pack prints no batch. Both engines offered one: PP-OCRv5 took the
+        # digits printed under the barcode, and the VLM independently returned
+        # the same pack's EAN, so the operator was shown a choice between two
+        # wrong answers.
+        fields = extract_fields(self.tokens())
+
+        assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
+
+    def test_a_number_followed_by_per_is_a_rate(self):
+        # The unit was lost entirely, so the per-unit rule had nothing to match.
+        # A retail price is never expressed as a rate.
+        fields = extract_fields(self.tokens())
+
+        assert fields["mrp"].normalized.value == "85.00"
+
+
+class TestWholeTokenDateGate:
+    def test_a_named_month_wrapped_in_letters_is_still_a_date(self):
+        # Banning letters outright cost three core fields: Indian packs print
+        # "Mfg.Month&Year:JAN.2025", where the letters are what make it a date.
+        fields = extract_fields([
+            token("Mfg.Month&Year:JAN.2025", 250, 100, 300, 30),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2025-01"

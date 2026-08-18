@@ -775,7 +775,11 @@ def _infer_unlabelled(
         # like it carries ONE date - which made the manufacturing date take the
         # Use By value and left the mangled token free to be adopted as a batch
         # code. Times are excluded: "13:02:38" reads as a valid 2038 date.
-        if not date_spans and ":" not in without_unit:
+        if (
+            not date_spans
+            and ":" not in without_unit
+            and _date_shaped(without_unit)
+        ):
             whole = normalizer.normalize_date(without_unit, "day")
             if whole.ok and _plausible_pack_date(whole.value):
                 dates.append((whole.value, without_unit, token))
@@ -879,6 +883,52 @@ def _infer_unlabelled(
 #: is prose and a very long digit run is a phone number, a licence or a GTIN.
 _STAMP_CODE = re.compile(r"^(?=.*[0-9])[A-Z0-9][A-Z0-9\-/]{3,15}$", re.IGNORECASE)
 
+def _date_shaped(text: str) -> bool:
+    """Could this whole token be a printed date rather than a code?
+
+    Gate on the whole-token date fallback, which exists for dates whose
+    separator was recognised as a digit ("27/0672026"). Ungated it also fires
+    on codes: _single_part_date strips letters and reads whatever digits
+    remain, so the side-of-pack code "XXXXXCCFXX0925" became September 2025 and
+    was reported as a manufacturing date for a pack marked June 2026.
+
+    Letters are allowed only when they NAME A MONTH. A first attempt banned
+    letters outright and cost three core fields, because Indian packs print
+    "Mfg.Month&Year:JAN.2025" — where the letters are the very thing that makes
+    it a date.
+    """
+    cleaned = text.strip()
+    if _DIGITS_AND_SEPARATORS.match(cleaned):
+        return True
+    return bool(normalizer.MONTH_NAME_PATTERN.search(cleaned))
+
+
+#: The word "per" standing alone beside a number.
+_BARE_PER = re.compile(r"^PER\b", re.IGNORECASE)
+
+#: Digits and date separators only, with at least four digits.
+#:
+#: Gate on the whole-token date fallback, which exists for dates whose
+#: separator was recognised as a digit. Without it the fallback also fires on
+#: codes: "XXXXXCCFXX0925" is a side-of-pack code, and _single_part_date strips
+#: the letters, reads the remaining "0925" as September 2025, and reported that
+#: as the manufacturing date for a pack marked June 2026. A date printed on a
+#: label does not arrive wrapped in ten letters.
+_DIGITS_AND_SEPARATORS = re.compile(r"^(?=(?:\D*\d){4})[\d/.\-]+$")
+
+#: A barcode number printed as text under the symbol.
+#:
+#: GTIN-12, EAN-13 and GTIN-14 are pure digit runs of 12 to 14, and every pack
+#: carries one. Measured: "19080131479436" was adopted as the batch number for
+#: a pack that prints no batch at all, and the vision-language model
+#: independently returned the same pack's EAN for the same field - so both
+#: engines produced a plausible-looking batch and the operator was offered a
+#: choice between two wrong answers.
+#:
+#: A batch code of 12 or more digits with no letter in it does not occur; the
+#: codes in this corpus are 4 to 10 characters and nearly all carry letters.
+_BARCODE_NUMBER = re.compile(r"^\d{12,14}$")
+
 #: A measured quantity, which is code-shaped and never a code. "100g" passes
 #: the pattern above - four characters, contains a digit - and was adopted as
 #: the batch number on a pack that prints none. Net weight sits near the stamp
@@ -974,6 +1024,8 @@ def _infer_stamp_batch(
         if as_date.ok and _plausible_pack_date(as_date.value):
             return None
         if _QUANTITY.match(candidate):
+            return None
+        if _BARCODE_NUMBER.match(candidate):
             return None
         if _MONEY_MENTION.search(candidate):
             return None
@@ -1238,6 +1290,12 @@ def _unit_price_split_across_tokens(
         if token.x - candidate.right > reach:
             break
         if _PER_UNIT.search(f"{candidate.text} {token.text}"):
+            return True
+        # "per" with no unit after it still means a rate. The recogniser
+        # returned "2.12" and "per" as separate tokens with the "g" lost
+        # entirely, and the existing rule needs a unit to fire. A retail price
+        # is never expressed as a rate, so the word alone is enough.
+        if _BARE_PER.match(token.text.strip()):
             return True
     return False
 
