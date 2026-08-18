@@ -649,6 +649,9 @@ _MONEY_MENTION = re.compile(
 #: is the tax disclaimer or the per-unit rate, never the amount itself.
 _BRACKETED = re.compile(r"[(（][^)）]*[)）]?")
 
+#: A complete day-month-year date. Two separators, which no price has.
+_FULL_DATE = re.compile(r"\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{2,4}")
+
 
 def _looks_like_price(text: str) -> bool:
     """True when a token could be a retail price rather than merely numeric.
@@ -665,6 +668,19 @@ def _looks_like_price(text: str) -> bool:
     printing "MRP 245" does not have.
     """
     if _UNIT_PRICE_LABEL.search(text):
+        return False
+
+    # A printed calendar date is never a price, and it is the most expensive
+    # thing that ever looked like one. On SCAN-000196 the token "27/06/2026"
+    # sat one row below the "MRP (incl. of all taxes)" label and the extractor
+    # took it, read the year as the amount, and reported an MRP of 2026.00 for
+    # a pack marked 85.00 - a confidently wrong core field, which section 24
+    # ranks as the worst outcome this project has.
+    #
+    # Keyed to the THREE-part shape rather than to "parses as a date", which
+    # would be far too greedy: "12.25" is a valid price and also a valid
+    # month/year. Two separators is what no price has.
+    if _FULL_DATE.search(text):
         return False
 
     # A parenthetical beside a price is never the price. Packs print
@@ -876,6 +892,36 @@ def _infer_stamp_batch(
     if "batchNumber" in results or not dated:
         return
 
+    # A value already claimed by another field is not also the batch number.
+    #
+    # On SCAN-000196 the pack printed a Lot No. and no batch at all. The lot was
+    # extracted correctly from its own label, and then this inference adopted
+    # the very same token as the batch, because a code sitting beside a date is
+    # exactly what it looks for. The result was a batch number on a pack that
+    # has none - a false accept, which section 24 ranks worst, and one the
+    # operator cannot catch by reading the value because the value is real.
+    #
+    # Deliberately narrow: this only stops the UNLABELLED inference from
+    # duplicating a value a LABEL already explained. It is not the general
+    # cross-field exclusivity that was tried and reverted for starving fields.
+    # Tokens a printed LABEL already accounted for.
+    #
+    # By token rather than by value: once a dropped prefix is restored the lot
+    # reads "M2 ZX2626PZAB" while the bare token still says "ZX2626PZAB", so
+    # comparing strings sees two different codes and lets the duplicate
+    # through. The token is the thing that can only belong to one field.
+    #
+    # And by LABELLED strategies only. The dates on a bare stamp are inferred
+    # from this same token block, so treating every claim as exclusive would
+    # block the batch search on exactly the packs it exists for - which is what
+    # a first attempt at this did.
+    claimed = {
+        id(candidate.value_token)
+        for candidate in results.values()
+        if candidate.normalized.ok
+        and candidate.strategy in ("inline", "same_line", "below")
+    }
+
     _, raw_date, date_token = dated[0]
     all_aliases = {
         _canonical(alias) for spec in load_field_specs() for alias in spec.aliases
@@ -900,6 +946,11 @@ def _infer_stamp_batch(
         return normalized.value if normalized.ok else None
 
     # The stamp usually prints both in one run: "MN2605121 05/26".
+    # No guard on the date token itself. A label having explained the DATE says
+    # nothing about the code printed beside it: on a pack reading
+    # "#RC-DS5720 / *07.2025" the date is labelled and the batch is not, and an
+    # early return here cost that batch entirely. Only the neighbour search is
+    # filtered, which is where a duplicate could actually come from.
     remainder = date_token.text.replace(raw_date, " ")
     for part in remainder.split():
         value = usable(part)
@@ -920,6 +971,7 @@ def _infer_stamp_batch(
         (
             token for token in tokens
             if token is not date_token
+            and id(token) not in claimed
             and abs(_centre_y(token) - _centre_y(date_token)) <= reach
         ),
         key=lambda token: abs(_centre_y(token) - _centre_y(date_token)),
@@ -1053,6 +1105,56 @@ def _derive_relative_expiry(
         return
 
 
+#: Longest prefix, in characters, that can be recovered this way. A genuine
+#: dropped prefix on a printed code is a syllable, not a word.
+_MAX_DROPPED_PREFIX = 3
+
+#: How far left of a candidate the dropped prefix can sit, in candidate heights.
+#: Two halves of one printed code are separated by a space, not a column gap.
+_PREFIX_REACH = 1.5
+
+
+def _with_dropped_prefix(
+    tokens: list[OcrToken],
+    label: OcrToken,
+    candidate: OcrToken,
+    text: str,
+) -> str:
+    """Put back a short leading fragment the code gate threw away.
+
+    A code printed with a space arrives as two tokens, and when the first is
+    short enough the plausibility gate rejects it for having fewer than three
+    alphanumerics. The extractor then skips past it to the longer half and
+    reports a truncated code that looks entirely reasonable.
+
+    Measured on SCAN-000196: the pack prints "Lot No.: M2 ZX2626PZAB", the
+    recogniser returned "M2" and "ZX2626PZAB" as separate tokens at full
+    confidence, and the lot was reported as "ZX2626PZAB". The vision-language
+    model read the whole thing and was marked as disagreeing with a value that
+    was not wrong so much as half-present.
+
+    Only a fragment that sits between the label and the candidate on the same
+    line is eligible, so this cannot reach across a column or pick up the tail
+    of a neighbouring field.
+    """
+    preceding = [
+        token for token in tokens
+        if token is not candidate
+        and token.right <= candidate.x
+        and token.x >= label.right
+        and _same_line(candidate, token)
+        and len(_canonical(token.text)) <= _MAX_DROPPED_PREFIX
+        and _canonical(token.text)
+    ]
+    if not preceding:
+        return text
+
+    nearest = max(preceding, key=lambda token: token.right)
+    if candidate.x - nearest.right > max(candidate.height, 1) * _PREFIX_REACH:
+        return text
+    return f"{nearest.text} {text}"
+
+
 def _best_neighbour(
     tokens: list[OcrToken],
     label_index: int,
@@ -1078,8 +1180,12 @@ def _best_neighbour(
         if not _is_plausible(candidate.text, spec.value_type, all_aliases):
             continue
 
+        text = candidate.text
+        if spec.value_type == "code":
+            text = _with_dropped_prefix(tokens, label, candidate, text)
+
         normalized = normalizer.normalize(
-            candidate.text, spec.value_type, spec.date_precision
+            text, spec.value_type, spec.date_precision
         )
         if not normalized.ok:
             continue

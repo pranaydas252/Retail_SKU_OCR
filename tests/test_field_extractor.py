@@ -566,3 +566,64 @@ class TestPackedAsManufactured:
         ])
 
         assert fields["manufacturingDate"].normalized.value == "2026-07"
+
+
+class TestScan196:
+    """Three faults from one real capture (SCAN-000196).
+
+    A pack printing Lot No. and no batch, with the MRP label one row above a
+    date. Geometry and text are verbatim from SkuScanOcr.
+    """
+
+    def tokens(self):
+        raw = [
+            ("MRP (incl. of alltaxes)", 256, 108, 222, 37),
+            ("85.00", 605, 65, 112, 38),
+            ("27/06/2026", 508, 136, 215, 44),
+            ("Date of Mfg:", 258, 162, 115, 33),
+            ("24/12/2026", 510, 176, 216, 43),
+            ("Use By:", 258, 189, 75, 32),
+            ("Lot No.:", 260, 219, 71, 24),
+            ("M2", 455, 222, 40, 27),
+            ("ZX2626PZAB", 510, 217, 217, 35),
+        ]
+        return [token(t, x, y, w, h) for t, x, y, w, h in raw]
+
+    def test_a_printed_date_is_not_the_mrp(self):
+        # The worst of the three. "27/06/2026" sat one row below the MRP label,
+        # was accepted as a price, and the YEAR became the amount — an MRP of
+        # 2026.00 on a pack marked 85.00.
+        fields = extract_fields(self.tokens())
+
+        assert fields["mrp"].normalized.value == "85.00"
+
+    def test_a_dropped_prefix_is_put_back(self):
+        # "M2 ZX2626PZAB" arrives as two tokens and "M2" has too few
+        # alphanumerics to pass the code gate, so the extractor skipped it and
+        # reported a truncated lot that looked entirely reasonable.
+        fields = extract_fields(self.tokens())
+
+        assert fields["lotCode"].normalized.value == "M2ZX2626PZAB"
+
+    def test_the_lot_is_not_also_reported_as_the_batch(self):
+        # The pack prints no batch. Stamp inference found a code beside a date —
+        # which is exactly what it looks for — and adopted the lot's own token,
+        # inventing a batch number the operator cannot catch by reading it,
+        # because the value is real.
+        fields = extract_fields(self.tokens())
+
+        assert "batchNumber" not in fields or not fields["batchNumber"].normalized.ok
+
+
+class TestStampBatchSurvivesALabelledDate:
+    def test_a_labelled_date_beside_an_unlabelled_code_still_yields_a_batch(self):
+        # Guarding the date token itself was overreach: a label explaining the
+        # DATE says nothing about the code printed beside it, and doing so cost
+        # this pack's batch entirely.
+        fields = extract_fields([
+            token("*Mfd in", 224, 280, 120, 30),
+            token("#RC-DS5720", 313, 322, 273, 44),
+            token("*07.2025", 311, 365, 233, 43),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "RC-DS5720"
