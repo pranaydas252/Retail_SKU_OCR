@@ -182,7 +182,13 @@ def process_scan(
             scan_code=scan_code,
             status=status,
             fields=fields,
-            tokens=tokens,
+            # Both engines' readings, not just PP-OCRv5's. Section 16 requires
+            # the raw OCR behind a scan be recoverable, and the VLM's reading
+            # was being dropped: in vlm-only mode that left ZERO tokens stored,
+            # so diagnosing a miss meant re-running the model against the saved
+            # JPEG. The tokens self-label through VariantName ("vlm"), so the
+            # two engines stay distinguishable in SQL.
+            tokens=tokens + vlm_tokens,
             image_path=str(image_path),
             overall_confidence=overall_confidence,
             variant_used=variant_used,

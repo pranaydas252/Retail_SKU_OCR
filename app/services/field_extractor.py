@@ -552,6 +552,17 @@ def _split_shared_date(
             # silently disables this rule on the packs that most need it.
             if ":" in raw:
                 continue
+            # Same gate the whole-token fallback uses. Without it this census
+            # counts codes as dates: the side-of-pack code "XXXXXCCFXX0925"
+            # normalized to September 2025, made a third "printed date", and
+            # silently disabled this rule on the very pack whose geometry it
+            # exists for -- leaving MFG and EXP both holding 24/12/2026.
+            #
+            # Only the whole-token candidate is gated. Spans found by
+            # _DATE_TOKEN already carry a separator, which is the evidence
+            # _date_shaped is looking for.
+            if raw is text and not _date_shaped(raw):
+                continue
             normalized = normalizer.normalize_date(raw, "day")
             value = normalized.value
             if not (normalized.ok and _plausible_pack_date(value)):
@@ -1323,6 +1334,18 @@ def _best_neighbour(
                 continue
 
         if not _is_plausible(candidate.text, spec.value_type, all_aliases):
+            continue
+
+        # An unreadable crop cannot become a value. See
+        # extract_min_value_confidence in config.py: a low recognition score is
+        # the recogniser saying it could not read this, and both strategies
+        # here reach across tokens to GUESS a value, so a guess built on an
+        # unread crop is exactly the false accept section 24 ranks worst.
+        # VLM tokens carry 0.0 by construction and are exempt.
+        if (
+            candidate.variant != "vlm"
+            and candidate.confidence < get_settings().extract_min_value_confidence
+        ):
             continue
 
         if spec.value_type == "currency" and _unit_price_split_across_tokens(

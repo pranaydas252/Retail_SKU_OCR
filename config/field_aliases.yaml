@@ -63,6 +63,19 @@ fields:
       - PACKED
       - PKD DATE
       - PKD ON
+      # "Date of ..." phrasings. Matching is exact-or-prefix, so a token
+      # reading "Date of Mfg:" is NOT matched by the MFG alias below -- MFG is
+      # not a prefix of DATEOFMFG. This is the same miss that DATE OF PACKAGING
+      # above was added to fix, on a different phrasing, and it cost the MFG
+      # field on SCAN-000487/488 (both engines): the label matched nothing, so
+      # the date was recovered by the "earlier of two printed dates" fallback
+      # at half the label and spatial quality.
+      - DATE OF MANUFACTURE
+      - DATE OF MANUFACTURING
+      - DATE OF MFG
+      - DATE OF MFD
+      - MFG ON
+      - MFD ON
       - MFG
       - MFD
       - PKD
@@ -79,6 +92,9 @@ fields:
       - USE BEFORE
       - BEST BEFORE
       - USE BY
+      # See the "Date of ..." note under manufacturingDate.
+      - DATE OF EXPIRY
+      - DATE OF EXPIRATION
       - EXP
 
   lotCode:

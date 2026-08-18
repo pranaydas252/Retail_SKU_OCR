@@ -763,3 +763,87 @@ class TestWholeTokenDateGate:
         ])
 
         assert fields["manufacturingDate"].normalized.value == "2025-01"
+
+
+class TestScan487:
+    """The same pack again, captured with the value column offset upward.
+
+    Three separate defects met on this one capture. The pack prints:
+
+        Net Wt.:                  40 g
+        MRP (incl. of all taxes)  85.00
+        Unit Sale Price           2.12 per g
+        Date of Mfg:              27/06/2026
+        Use By:                   24/12/2026
+        Lot No.:                  M2 ZX2626PZAB
+
+    but every value box sits roughly one row HIGHER than the label it belongs
+    to, so nearest-neighbour association reaches for the wrong row.
+    """
+
+    def tokens(self):
+        raw = [
+            ("Net Wt.:", 226, 40, 115, 40, 0.8679),
+            ("40g", 382, 36, 78, 44, 0.9936),
+            ("85.00", 603, 42, 122, 46, 0.9974),
+            ("2.12", 457, 83, 136, 45, 0.9944),
+            ("per g", 607, 90, 124, 35, 0.9255),
+            ("MRP (incl.ofall taxes)", 227, 93, 231, 41, 0.8981),
+            ("27/0672026", 495, 121, 239, 50, 0.9664),
+            ("Unit Sale Price", 232, 126, 138, 32, 0.9660),
+            ("Date ofMfg:", 234, 155, 112, 33, 0.9469),
+            ("24/12/2026", 498, 165, 239, 50, 0.9977),
+            ("Use By:", 236, 183, 72, 34, 0.9544),
+            ("M2 ZX2626PZAB", 432, 208, 307, 45, 0.9729),
+            ("Lot No.:", 240, 213, 66, 29, 0.8708),
+            # Edge print, read as a tall vertical strip the recogniser could
+            # not make out.
+            ("20", 128, 220, 52, 191, 0.2043),
+            ("119080131479436", 240, 364, 434, 46, 0.9544),
+        ]
+        return [token(t, x, y, w, h, c) for t, x, y, w, h, c in raw]
+
+    def test_date_of_mfg_is_a_manufacturing_label(self):
+        # Matching is exact-or-prefix and MFG is not a prefix of DATEOFMFG, so
+        # this label matched nothing and the date was recovered by the
+        # "earlier of two printed dates" fallback at half the label quality.
+        fields = extract_fields(self.tokens())
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-27"
+        assert fields["manufacturingDate"].label_match_quality == 1.0
+
+    def test_an_unreadable_token_cannot_become_the_mrp(self):
+        # The real price sat one row above the MRP label at 0.9974. The "below"
+        # strategy instead returned the 0.2043 edge strip, and the operator was
+        # shown 20.00 for a pack priced 85.00.
+        fields = extract_fields(self.tokens())
+
+        assert fields["mrp"].normalized.value == "85.00"
+
+    def test_the_two_dates_do_not_collapse_onto_one_token(self):
+        fields = extract_fields(self.tokens())
+
+        assert fields["expiryDate"].normalized.value == "2026-12-24"
+        assert (
+            fields["manufacturingDate"].value_token
+            is not fields["expiryDate"].value_token
+        )
+
+
+class TestSharedDateCensus:
+    def test_a_code_is_not_counted_as_a_third_printed_date(self):
+        # _split_shared_date disables itself when a pack prints three dates,
+        # because it cannot arbitrate between them. It called the normalizer
+        # directly, bypassing the whole-token gate, so "XXXXXCCFXX0925" counted
+        # as September 2025 and switched the rule off on a two-date pack --
+        # leaving both date labels holding the same token.
+        fields = extract_fields([
+            token("Date ofMfg:", 250, 154, 107, 35),
+            token("27/0672026", 495, 123, 221, 48),
+            token("Use By:", 250, 183, 70, 33),
+            token("24/12/2026", 498, 163, 222, 47),
+            token("XXXXXCCFXX0925", 141, 227, 55, 174),
+        ])
+
+        assert fields["manufacturingDate"].normalized.value == "2026-06-27"
+        assert fields["expiryDate"].normalized.value == "2026-12-24"

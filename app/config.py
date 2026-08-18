@@ -64,6 +64,23 @@ class Settings(BaseSettings):
     ocr_det_box_thresh: float = 0.6
     ocr_rec_score_thresh: float = 0.0
 
+    # Recognition floor for a token that a SPATIAL strategy proposes as a
+    # field value. Deliberately not ocr_rec_score_thresh, which stays 0.0 so
+    # every detected box is preserved for the audit trail (section 16).
+    #
+    # A low score is the recogniser reporting that it could not read the crop.
+    # Letting such a token become a presented value is the false-accept path
+    # section 24 ranks worst. On SCAN-000487 the MRP label matched, the real
+    # value "85.00" sat one row up at 0.9974, and the "below" strategy instead
+    # returned "20" at 0.2043 -- a tall vertical strip of edge print. The
+    # operator was shown 20.00.
+    #
+    # Applies only to strategies that reach ACROSS tokens to guess a value.
+    # An "inline" hit, where the label and value are the same token, is not
+    # a guess and is exempt -- as are VLM tokens, which carry 0.0 by
+    # construction because the runtime reports no per-token score.
+    extract_min_value_confidence: float = 0.50
+
     # 1 is measured fastest on CPU, against intuition. Batched recognition
     # pads every crop to the widest in the batch, and label text varies wildly
     # in width, so batching spends most of its time on padding. Measured on a
