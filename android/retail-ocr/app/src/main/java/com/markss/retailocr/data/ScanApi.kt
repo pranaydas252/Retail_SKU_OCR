@@ -30,6 +30,8 @@ interface ScanApi {
         @Part image: MultipartBody.Part,
         @Part("deviceId") deviceId: okhttp3.RequestBody,
         @Part("deviceModel") deviceModel: okhttp3.RequestBody,
+        /** "both" or "vlm" — which reading pipeline the server should run. */
+        @Part("engineMode") engineMode: okhttp3.RequestBody,
     ): ScanResponse
 
     @POST("api/v1/scans/{scanId}/confirm")

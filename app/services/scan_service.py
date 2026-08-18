@@ -50,11 +50,17 @@ REQUIRED_FIELDS = [
 ]
 
 
+#: Engine pipelines the device can choose between.
+ENGINE_BOTH = "both"
+ENGINE_VLM_ONLY = "vlm"
+
+
 def process_scan(
     data: bytes,
     device_id: str | None = None,
     device_model: str | None = None,
     settings: Settings | None = None,
+    engine_mode: str | None = None,
 ) -> ScanResponse:
     """Run one image through the pipeline.
 
@@ -62,6 +68,10 @@ def process_scan(
     failure propagates and is handled as a server error by the route.
     """
     s = settings or get_settings()
+    mode = (engine_mode or s.engine_mode).strip().lower()
+    if mode not in (ENGINE_BOTH, ENGINE_VLM_ONLY):
+        mode = ENGINE_BOTH
+
     timer = StageTimer()
     scan_code = next_scan_code()
 
@@ -69,6 +79,7 @@ def process_scan(
         "scanId": scan_code,
         "deviceId": device_id,
         "deviceModel": device_model,
+        "engineMode": mode,
     }
     logger.info("Scan started", extra=log_context)
 
@@ -87,8 +98,10 @@ def process_scan(
     # wins. This is a deliberate short-circuit: each variant costs a full OCR
     # pass, and cross-variant agreement scoring (section 12) belongs in
     # Phase 2 where there are fields to compare.
+    # Skipped entirely in VLM-only mode rather than run and discarded, so the
+    # measured latency belongs to the pipeline being compared.
     with timer.stage("ocrMs"):
-        for variant in s.variant_list:
+        for variant in [] if mode == ENGINE_VLM_ONLY else s.variant_list:
             processed = image_service.build_variant(image, variant)
             processed = image_service.resize_for_ocr(processed, s.ocr_det_limit_side_len)
             image_service.store_variant(processed, scan_code, variant, s)
@@ -110,8 +123,12 @@ def process_scan(
     # detector. It is also best-effort — several seconds of model time must
     # never cost the operator a scan PP-OCRv5 already answered, so a failure
     # here is logged and the primary result stands.
+    # In VLM-only mode it is not a second opinion, it is the only one, so the
+    # trigger does not get a say. Its fields still arrive through the secondary
+    # slot and are therefore capped at REVIEW by F2 - correctly: nothing
+    # corroborated them, which is the definition of this pipeline.
     vlm_tokens: list[OcrToken] = []
-    if should_run_vlm(tokens, s):
+    if mode == ENGINE_VLM_ONLY or should_run_vlm(tokens, s):
         with timer.stage("vlmMs"):
             try:
                 vlm_tokens = get_vlm_service().tokens(image)

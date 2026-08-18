@@ -74,6 +74,22 @@
         android:textSize="12sp" />
 
     <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/aiOnlySwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:text="@string/settings_ai_only"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/settings_ai_only_help"
+        android:textAppearance="@style/TextAppearance.RetailOcr.Body"
+        android:textSize="12sp" />
+
+    <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/sampleModeSwitch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

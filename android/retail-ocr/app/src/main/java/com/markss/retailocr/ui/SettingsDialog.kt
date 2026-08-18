@@ -81,6 +81,7 @@ object SettingsDialog {
 
         binding.serverInput.setText(AppPreferences.serverUrl)
         binding.printerInput.setText(AppPreferences.printerMac)
+        binding.aiOnlySwitch.isChecked = AppPreferences.aiOnlyMode
         binding.sampleModeSwitch.isChecked = AppPreferences.sampleMode
 
         val dialog = MaterialAlertDialogBuilder(context)
@@ -164,6 +165,7 @@ object SettingsDialog {
 
                 AppPreferences.serverUrl = server
                 AppPreferences.printerMac = mac
+                AppPreferences.aiOnlyMode = binding.aiOnlySwitch.isChecked
                 AppPreferences.sampleMode = binding.sampleModeSwitch.isChecked
                 dialog.dismiss()
                 onSaved()

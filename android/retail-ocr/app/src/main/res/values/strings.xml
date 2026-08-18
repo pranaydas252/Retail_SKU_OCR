@@ -35,6 +35,8 @@
     <!-- Camera -->
     <string name="scan_instruction">Place the label inside this window</string>
     <string name="field_sku">SKU</string>
+    <string name="settings_ai_only">AI only</string>
+    <string name="settings_ai_only_help">Skip PP-OCR and read with the AI model alone. Slower, and no second opinion — so no field can reach high confidence.</string>
     <!-- Engine names on the contested-field chips. Their own line above the
          value, never prefixed to it. -->
     <string name="result_engine_ocr">OCR</string>

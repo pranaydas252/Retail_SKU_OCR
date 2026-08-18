@@ -154,6 +154,21 @@ class Settings(BaseSettings):
     #   never     equivalent to vlm_enabled = False
     vlm_trigger: str = "fallback"
 
+    # Which engines run. Overridable per request so the device can A/B the two
+    # pipelines against the same packs without a server restart.
+    #
+    #   both  ML Kit gates the capture, PP-OCRv5 reads, the VLM reads, and the
+    #         two are merged with disagreements shown to the operator.
+    #   vlm   ML Kit gates the capture and the VLM is the only reader.
+    #         PP-OCRv5 does not run at all - not merely ignored, skipped, so
+    #         the latency reflects the pipeline being measured.
+    #
+    # Both modes go through the SAME extraction, normalization, validation and
+    # confidence code. That is what makes the comparison mean anything: a
+    # difference in the numbers is a difference between the engines, not
+    # between two sets of rules.
+    engine_mode: str = "both"
+
     # What "came up short" means: fewer than this many of the three core fields
     # (MRP, manufacturing date, expiry date) extracted. Two of three is a pack
     # that mostly worked; one or none is the case worth two minutes of model.

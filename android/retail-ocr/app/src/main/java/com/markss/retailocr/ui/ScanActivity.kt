@@ -633,6 +633,7 @@ class ScanActivity : AppCompatActivity() {
                         image = ApiClient.imagePart(bytes),
                         deviceId = ApiClient.textPart(DeviceId.of(this@ScanActivity)),
                         deviceModel = ApiClient.textPart("${Build.MANUFACTURER} ${Build.MODEL}"),
+                        engineMode = ApiClient.textPart(AppPreferences.engineMode),
                     )
                 }
             }

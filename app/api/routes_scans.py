@@ -35,6 +35,10 @@ def create_scan(
     image: UploadFile = File(..., description="JPEG or PNG of the SKU label"),
     deviceId: str | None = Form(default=None),
     deviceModel: str | None = Form(default=None),
+    engineMode: str | None = Form(
+        default=None,
+        description='"both" or "vlm"; omitted uses the server default',
+    ),
 ) -> ScanResponse:
     """Upload a label image and receive OCR results.
 
@@ -51,7 +55,8 @@ def create_scan(
 
     try:
         return scan_service.process_scan(
-            data, device_id=deviceId, device_model=deviceModel
+            data, device_id=deviceId, device_model=deviceModel,
+            engine_mode=engineMode
         )
     except ImageValidationError as exc:
         raise HTTPException(

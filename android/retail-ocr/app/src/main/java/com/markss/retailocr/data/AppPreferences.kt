@@ -21,6 +21,10 @@ object AppPreferences {
     private const val FILE = "retail_ocr_settings"
     private const val KEY_SERVER_URL = "server_url"
     private const val KEY_PRINTER_MAC = "printer_mac"
+    const val ENGINE_BOTH = "both"
+    const val ENGINE_VLM_ONLY = "vlm"
+
+    private const val KEY_AI_ONLY = "ai_only_mode"
     private const val KEY_SAMPLE_MODE = "sample_mode"
     private const val KEY_BLUETOOTH_ASKED = "bluetooth_asked"
 
@@ -50,6 +54,28 @@ object AppPreferences {
     var sampleMode: Boolean
         get() = prefs.getBoolean(KEY_SAMPLE_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SAMPLE_MODE, value).apply()
+
+    /**
+     * Read with the vision-language model alone, skipping PP-OCRv5.
+     *
+     * A switch rather than a rebuild because the two pipelines have to be
+     * compared on the SAME packs to mean anything, and a pack is only in front
+     * of the operator once. Both run identical extraction, normalization,
+     * validation and confidence code on the server, so a difference in results
+     * is a difference between the engines rather than between two sets of
+     * rules.
+     *
+     * Off by default: PP-OCRv5 answers in about 6s where the model takes 95s,
+     * and dropping it also drops the agreement signal that lets a field reach
+     * HIGH at all.
+     */
+    var aiOnlyMode: Boolean
+        get() = prefs.getBoolean(KEY_AI_ONLY, false)
+        set(value) = prefs.edit().putBoolean(KEY_AI_ONLY, value).apply()
+
+    /** Value for the scan request's engineMode field. */
+    val engineMode: String
+        get() = if (aiOnlyMode) ENGINE_VLM_ONLY else ENGINE_BOTH
 
     /**
      * Whether the Bluetooth permission prompt has been shown at least once.

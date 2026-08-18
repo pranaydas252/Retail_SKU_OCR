@@ -319,3 +319,92 @@ class TestHealthReportsTheSecondEngine:
         assert body["vlmEnabled"] is True, "configuration is reported as configured"
         assert body["vlmReady"] is False, "but it cannot actually be reached"
         assert body["vlmModel"] == "qwen3-vl:4b-instruct"
+
+
+class TestEngineMode:
+    """Two pipelines, chosen per request so the device can A/B them.
+
+    The comparison is only meaningful because both go through the SAME
+    extraction, normalization, validation and confidence code — a difference in
+    the results is a difference between the engines, not between two sets of
+    rules.
+    """
+
+    def _vlm(self, monkeypatch, texts):
+        class Reader:
+            def tokens(self, image):
+                return [
+                    OcrToken(t, 10 + 90 * i, 10, 80, 20, 0.9)
+                    for i, t in enumerate(texts)
+                ]
+
+        monkeypatch.setattr(scan_service, "get_vlm_service", lambda: Reader())
+
+    def test_vlm_only_does_not_run_pp_ocr(self, client, monkeypatch):
+        # Skipped, not run-and-discarded, so the measured latency belongs to
+        # the pipeline being compared.
+        called = []
+
+        class Spy:
+            is_ready = True
+
+            def recognize(self, image, variant=None):
+                called.append(variant)
+                return [OcrToken("MFG", 10, 10, 60, 20, 0.9)]
+
+        monkeypatch.setattr(scan_service, "get_ocr_service", lambda: Spy())
+        self._vlm(monkeypatch, ["MFG", "07/2026"])
+
+        body = client.post(
+            "/api/v1/scans",
+            files={"image": ("l.jpg", jpeg(), "image/jpeg")},
+            data={"engineMode": "vlm"},
+        ).json()
+
+        assert called == [], "PP-OCRv5 must not run in VLM-only mode"
+        assert body["fields"]["manufacturingDate"]["value"] == "2026-07"
+        assert body["fields"]["manufacturingDate"]["engines"] == ["VLM"]
+
+    def test_a_vlm_only_field_still_cannot_reach_high(self, client, monkeypatch):
+        # Nothing corroborated it, which is the definition of this pipeline.
+        stub_tokens(monkeypatch, [])
+        self._vlm(monkeypatch, ["MFG", "07/2026"])
+
+        body = client.post(
+            "/api/v1/scans",
+            files={"image": ("l.jpg", jpeg(), "image/jpeg")},
+            data={"engineMode": "vlm"},
+        ).json()
+
+        assert body["fields"]["manufacturingDate"]["band"] != "HIGH"
+
+    def test_both_mode_runs_pp_ocr(self, client, monkeypatch):
+        stub_tokens(monkeypatch, [
+            OcrToken("MFG", 10, 10, 60, 20, 0.9),
+            OcrToken("07/2026", 90, 10, 90, 20, 0.9),
+        ])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: False
+        )
+
+        body = client.post(
+            "/api/v1/scans",
+            files={"image": ("l.jpg", jpeg(), "image/jpeg")},
+            data={"engineMode": "both"},
+        ).json()
+
+        assert body["fields"]["manufacturingDate"]["engines"] == ["OCR"]
+
+    def test_an_unknown_mode_falls_back_rather_than_failing(self, client, monkeypatch):
+        stub_tokens(monkeypatch, [OcrToken("MFG", 10, 10, 60, 20, 0.9)])
+        monkeypatch.setattr(
+            scan_service, "should_run_vlm", lambda tokens, settings: False
+        )
+
+        response = client.post(
+            "/api/v1/scans",
+            files={"image": ("l.jpg", jpeg(), "image/jpeg")},
+            data={"engineMode": "nonsense"},
+        )
+
+        assert response.status_code == 200
