@@ -160,14 +160,14 @@ class TestBands:
         assert confidence.band(0.97) == ConfidenceBand.HIGH
 
     def test_review_band(self):
-        assert confidence.band(0.85) == ConfidenceBand.REVIEW
+        assert confidence.band(0.60) == ConfidenceBand.REVIEW
 
     def test_low_band(self):
-        assert confidence.band(0.50) == ConfidenceBand.LOW
+        assert confidence.band(0.40) == ConfidenceBand.LOW
 
     def test_boundaries_are_inclusive_at_the_bottom(self):
-        assert confidence.band(0.95) == ConfidenceBand.HIGH
-        assert confidence.band(0.80) == ConfidenceBand.REVIEW
+        assert confidence.band(0.75) == ConfidenceBand.HIGH
+        assert confidence.band(0.50) == ConfidenceBand.REVIEW
 
 
 class TestOverallConfidence:
@@ -187,18 +187,23 @@ class TestOverallConfidence:
         assert confidence.overall({}) is None
 
 
-class TestUncorroboratedSecondaryIsCapped:
-    """A value only the VLM produced cannot be presented as HIGH (PLAN.md F2).
+class TestUncorroboratedIsCapped:
+    """HIGH means two engines read the value and read it the same.
 
-    Measured on the 20-image corpus, the VLM never declines — 4 missed against
-    PP-OCRv5's 29 — and produced the project's only two false accepts. An
-    engine that always answers cannot signal its own uncertainty, so its
-    mistakes look exactly like its successes. Corroboration is the only thing
-    that tells them apart.
+    Measured on the 19-image gated corpus with both engines running:
+
+        both agreed    31 values   31 correct    0 wrong   100%
+        contested      10 values    4 correct    6 wrong    40%
+        one engine     27 values   16 correct   11 wrong    59%
+
+    Agreement predicts correctness far better than the score does — the two
+    highest-scoring wrong values in that corpus, 0.869 and 0.783, are both
+    uncorroborated, so no threshold can exclude them and this rule excludes
+    both outright.
     """
 
-    def test_a_vlm_only_value_is_capped_at_review(self):
-        assert confidence.band(0.99, uncorroborated_secondary=True) == (
+    def test_an_uncorroborated_value_is_capped_at_review(self):
+        assert confidence.band(0.99, uncorroborated=True) == (
             ConfidenceBand.REVIEW
         )
 
@@ -208,6 +213,6 @@ class TestUncorroboratedSecondaryIsCapped:
     def test_the_cap_does_not_rescue_a_poor_score(self):
         # It caps the top of the range, it does not lift the bottom: a badly
         # scoring VLM-only value stays LOW rather than being promoted.
-        assert confidence.band(0.10, uncorroborated_secondary=True) == (
+        assert confidence.band(0.10, uncorroborated=True) == (
             ConfidenceBand.LOW
         )

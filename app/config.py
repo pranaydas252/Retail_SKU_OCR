@@ -261,26 +261,52 @@ class Settings(BaseSettings):
     # --- Field extraction (Phase 2) --------------------------------------
     field_alias_config: Path = PROJECT_ROOT / "config" / "field_aliases.yaml"
 
-    # Tuned against the 20-image corpus by scripts/calibrate_confidence.py,
-    # replacing the engineering defaults section 12 said must not be trusted
-    # until they were measured.
+    # Tuned by scripts/calibrate_confidence.py against the 19-image gated
+    # corpus with BOTH engines running, which is what production does. The
+    # previous values were measured on PP-OCRv5 alone, so the two-engine
+    # agreement signal never fired while they were being chosen.
     #
-    # HIGH was 0.95, which admitted no wrong value but reached only 7 of 34
-    # correct ones — so 27 correct values arrived carrying a warning. 0.92 is
-    # the highest-coverage threshold that still admits ZERO wrong values, and
-    # it reaches 11. Precision is kept absolute deliberately: section 24 rates
-    # a wrong value above a missing one, so a wrong value shown as HIGH is the
-    # expensive mistake and a correct one shown as REVIEW costs only a glance.
+    # HIGH was 0.92. On the two-engine corpus that admitted no wrong value but
+    # reached only 11 of 51 correct ones, so 40 correct values arrived carrying
+    # a warning -- and an operator warned on four values out of five stops
+    # reading the warning. Worse, 0.92 was unreachable by construction: with a
+    # realistic spatial score of 0.68 a flawless corroborated extraction
+    # ceilings at 0.896.
     #
-    # REVIEW stays at 0.80, but only after the ambiguity penalty was fixed.
-    # It used to invert: values in 0.80-0.95 were 73% correct against an 83%
-    # base rate while values BELOW 0.80 were 84% correct, because the penalty
-    # was pushing correct convention-resolved dates underneath wrong ones.
-    # With that corrected the ordering is monotonic again — 71% below 0.80,
-    # 77% between, 100% above 0.92 — though LOW and REVIEW are weakly
-    # separated on 41 values and should be revisited as the corpus grows.
-    confidence_high_threshold: float = 0.92
-    confidence_review_threshold: float = 0.80
+    # What actually separates right from wrong here is not the score, it is
+    # engine agreement, and that is enforced structurally in confidence.band
+    # rather than by this number. The threshold only decides how much of the
+    # AGREED set qualifies, and on this corpus every agreed value is correct:
+    #
+    #   HIGH >= 0.60  31 of 51 correct, 0 wrong
+    #   HIGH >= 0.75  31 of 51 correct, 0 wrong
+    #   HIGH >= 0.80  25 of 51 correct, 0 wrong
+    #
+    # Coverage is flat from 0.60 to 0.75, so 0.75 is taken as the strictest
+    # setting that costs nothing. It is a floor against a badly-scored value
+    # that two engines happen to agree on -- not seen on this corpus, which is
+    # why the threshold is cheap, and exactly why it is kept.
+    #
+    # REVIEW drops 0.80 -> 0.50 to stay below HIGH and because that is where
+    # correctness falls off. The resulting bands finally order by correctness:
+    # HIGH 100% (31 values), REVIEW 67% (15), LOW 45% (22). REVIEW and LOW are
+    # still weakly separated and should be revisited as the corpus grows.
+    confidence_high_threshold: float = 0.75
+    confidence_review_threshold: float = 0.50
+
+    # HIGH for a scan where only ONE engine ran, so the agreement rule above
+    # has nothing to work with and cannot protect the band.
+    #
+    # Not the same number, because it is not the same claim. Measured on the
+    # same corpus with PP-OCRv5 alone, 0.75 admits FOUR wrong values into HIGH
+    # -- an expiry off by a day component, a batch read as "9ML", a
+    # manufacturing date off by nine years, and an MRP of 31612.00 against a
+    # printed 1012.50. 0.92 is the lowest threshold that admits none, reaching
+    # 12 of 37 correct values.
+    #
+    # This path is live whenever vlm_trigger is "fallback" or "never", and
+    # whenever Ollama is unreachable, so it is not a hypothetical.
+    confidence_high_threshold_single_engine: float = 0.92
 
     # --- Printer / QR ----------------------------------------------------
     printer_dpi: int = 203

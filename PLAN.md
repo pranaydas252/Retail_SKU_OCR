@@ -680,11 +680,87 @@ Open: whether contested cards become noise. With the VLM answering every field
 it will disagree with correct PP-OCRv5 reads too, and if a chip pair appears on
 nearly every field the operator will stop reading them.
 
+### Confidence bands calibrated against both engines — 2026-08-19
+
+The bands were tuned on PP-OCRv5 alone, so the agreement signal never fired
+while the numbers were being chosen. Re-measured on the 19 ground-truthed
+images with both engines running, and the conclusion is not a new number but a
+different rule.
+
+**Agreement, not score, is what separates right from wrong.**
+
+| | values | correct | wrong | precision |
+| --- | --- | --- | --- | --- |
+| both engines agreed | 31 | 31 | 0 | **100%** |
+| contested | 10 | 4 | 6 | 40% |
+| one engine only | 27 | 16 | 11 | 59% |
+
+Two consequences, both counter-intuitive enough to record:
+
+- **No score threshold can do this job.** The two highest-scoring wrong values
+  score 0.869 and 0.783. Any threshold low enough to admit a useful number of
+  correct values admits those too. Requiring agreement excludes both by
+  construction and drops the top wrong value in the band to nothing.
+- **Contested is worse than solo.** Two engines both answering looks like more
+  evidence than one. It measures at 40% against solo's 59%, because engines
+  disagree exactly where the print is hard. So contested is capped out of HIGH
+  as well — which also matches the screen, where a contested field is already
+  shown as an open question with neither reading preselected.
+
+The F2 cap therefore generalizes: it was VLM-only, it is now "anything two
+engines did not agree on". The original argument — an engine that never
+declines cannot signal its own uncertainty — was right but incomplete;
+PP-OCRv5's solo errors measure no better and are the confident ones.
+
+Bands before and after, same corpus:
+
+| | HIGH | REVIEW | LOW | correct values warned about |
+| --- | --- | --- | --- | --- |
+| before (0.92 / 0.80) | 11 values, 100% | 16, 94% | 41, 61% | 40 of 51 |
+| after (rule + 0.75 / 0.50) | 31 values, 100% | 15, 67% | 22, 45% | **20 of 51** |
+
+`confidence_high_threshold` 0.92 → 0.75 and `confidence_review_threshold`
+0.80 → 0.50. The old HIGH was unreachable anyway: with a realistic spatial
+score of 0.68 a flawless corroborated extraction ceilings at 0.896.
+
+**A single-engine scan keeps 0.92**, in the new
+`confidence_high_threshold_single_engine`. This is not symmetry for its own
+sake — measured on the same corpus with PP-OCRv5 alone, 0.75 admits four wrong
+values into HIGH, including an MRP of 31612.00 against a printed 1012.50. That
+path is live whenever `VLM_TRIGGER=fallback` or Ollama is unreachable.
+
+Open: 20 correct values still sit outside HIGH, and 14 of those are values only
+the VLM read. That is the cap working as designed, not a tuning failure — but
+it is also the ceiling on how quiet this screen can get until PP-OCRv5 can read
+inkjet stamps.
+
+### First measured two-engine accuracy — 2026-08-19
+
+| pipeline | core | codes | core missed | false accepts | wrong shown as HIGH |
+| --- | --- | --- | --- | --- | --- |
+| PP-OCRv5 + rules | 55% | 47% | 19 | 0 | 0 |
+| both engines, merged | **74%** | **71%** | **3** | 1 | 0 |
+
+Every earlier accuracy figure in this document describes PP-OCRv5 alone,
+because `scripts/measure_accuracy.py` never ran the VLM. Core is still short of
+the 95% target in section 24.
+
 ### Closed during this cycle
 
 - Deskew direction verified on device by the user.
 - ZQ320 printing confirmed end to end, including the QR.
 - The full chain runs on real hardware: capture → OCR → confirm → SQL Server → print.
+- **The barcode guard was only in the unlabelled-stamp path.** A pack whose
+  `B.NO.` label had the EAN as its nearest plausible neighbour reached the
+  labelled path, where nothing stopped it — and both engines agree on a
+  barcode, so the operator saw a corroborated wrong answer. Moved into
+  `_is_plausible`, which both paths share.
+- **A contest chip stayed highlighted after the operator typed a third value.**
+  Both engines wrong is a real outcome on inkjet stamps, and the operator can
+  always type over it — but the chip went on asserting a reading they had
+  rejected, and that assertion is what `dbo.ContestedFields` records as
+  evidence of which engine to trust. Selection is now derived from the field
+  text rather than latched by the tap, so "neither" needs no button of its own.
 
 ---
 

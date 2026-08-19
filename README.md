@@ -42,11 +42,14 @@ The **backend lives at the repository root**. The Android project lives in `andr
 | Server | Python 3.12, FastAPI, Uvicorn behind IIS |
 | Preprocessing | OpenCV |
 | OCR | PaddleOCR 3.4.1 / PaddlePaddle 3.3.1, PP-OCRv5, **CPU only** |
+| Second engine | `qwen3-vl:4b-instruct` via Ollama, local **CPU only**. Same extraction path, so its output is directly comparable |
 | Extraction | Deterministic rules, aliases, spatial association |
 | Database | Microsoft SQL Server (ODBC Driver 18) |
 | Printer | Zebra ZQ320 over Bluetooth, ZSDK (Link-OS), ZPL |
 
-Deliberately excluded: Redis, RabbitMQ, Celery, Kafka, PostgreSQL, vector databases, LLMs, VLMs, GPU inference, agent frameworks, Kubernetes, microservices. See `CLAUDE.md` section 2.
+Deliberately excluded: Redis, RabbitMQ, Celery, Kafka, PostgreSQL, vector databases, cloud LLM APIs, GPU inference, agent frameworks, Kubernetes, microservices, and any model training or fine-tuning. See `CLAUDE.md` section 2.
+
+A vision-language model is the one exception, added 2026-08-16 after PP-OCRv5 was measured unable to read inkjet date stamps. It runs locally on CPU through Ollama — no cloud, no GPU, no cost — so the constraints above hold.
 
 ---
 
@@ -130,22 +133,44 @@ python -m pytest tests -q
 | --- | --- |
 | 0 — Repo skeleton, config contract | Done |
 | 1 — OCR spine: upload → OpenCV → PaddleOCR → tokens | Done |
-| 2 — Field extraction, normalization, validation, confidence | Done; thresholds await real-image tuning |
+| 2 — Field extraction, normalization, validation, confidence | Done; thresholds calibrated against the gated corpus |
 | 3 — SQL Server persistence, confirm/fetch endpoints | Done |
 | 4 — Android app (Kotlin + XML) | Done — built and verified on a real TC22 |
-| 5 — ZQ320 printing | Code complete; **never confirmed against a physical printer** |
+| 5 — ZQ320 printing | Done — confirmed end to end on a physical printer, QR included |
 | 6 — IIS deployment | Not started |
 
-Accuracy on the 15 ROI captures in `sample_data/roi/`, reported in the two tiers of `CLAUDE.md` section 24:
+The full chain runs on real hardware: capture → OCR → confirm → SQL Server → print.
 
-| Tier | Fields | Score |
-| --- | --- | --- |
-| Core | MRP, manufacturing date, expiry date | **43%** |
-| Codes | Batch number, lot code | **38%** |
+### Accuracy
 
-Both are far short of the 95% core target. Recognition, not extraction, is the remaining ceiling — see `PLAN.md`.
+Measured on the 19 ground-truthed ROI captures in `sample_data/roi/`, reported in the two tiers of `CLAUDE.md` section 24 — never blended.
+
+| Tier | Fields | PP-OCRv5 alone | Both engines (ships) |
+| --- | --- | --- | --- |
+| Core | MRP, manufacturing date, expiry date | 55% | **74%** |
+| Codes | Batch number, lot code | 47% | **71%** |
+
+The second engine is a Qwen vision-language model run locally on CPU through Ollama. It costs latency, not money: no cloud, no GPU. It closes most of the gap by answering where PP-OCRv5 declines — 3 missed core values against 19.
+
+Core is still short of the 95% target. Recognition, not extraction, is the remaining ceiling — see `PLAN.md`.
+
+### What the confidence bands mean
+
+HIGH means **both engines read the value and read it the same**. That is a rule, not a score threshold, and it is what makes the band worth reading:
+
+| Band | Values | Correct | Wrong |
+| --- | --- | --- | --- |
+| HIGH | 31 | 31 | **0** |
+| REVIEW | 15 | 10 | 5 |
+| LOW | 22 | 10 | 12 |
+
+Agreement predicts correctness far better than the score does: the two highest-scoring *wrong* values in the corpus score 0.869 and 0.783, above any threshold worth setting, and both are uncorroborated. No wrong value reaches HIGH in either engine mode.
+
+### Latency
 
 Latency scales with the **number of detected text regions**, not image size: 4.6 s per ROI crop on the reference machine, and a full pack shot is much worse. This is why the app crops to the ROI window before uploading.
+
+Running both engines costs far more than that — 95–160 s per scan on the reference laptop, essentially all of it the VLM on CPU. Set `VLM_TRIGGER=fallback` to trade the accuracy above for speed; the single-engine confidence threshold is separate and stays strict, so the HIGH band remains clean in that mode.
 
 ---
 

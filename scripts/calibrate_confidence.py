@@ -177,16 +177,28 @@ def observe(cache: dict[str, dict], engine: str) -> list[dict]:
                     "score": float(field.confidence),
                     "correct": want is not None and same(want, field.value),
                     "engines": ",".join(field.engines or []) or "-",
+                    # Capped out of HIGH by confidence.band regardless of
+                    # score, so a threshold sweep that ignored it would
+                    # describe a band the app does not show. Contested counts
+                    # as capped: two engines that disagree have not agreed.
+                    "capped": engine == "both" and (
+                        len(field.engines or []) < 2 or bool(field.conflict_value)
+                    ),
                 }
             )
     return rows
 
 
+def _in_high(row: dict, threshold: float) -> bool:
+    """HIGH as the app decides it: score AND corroboration, not score alone."""
+    return row["score"] >= threshold and not row["capped"]
+
+
 def report(rows: list[dict], high_t: float, review_t: float) -> None:
-    def band_of(score: float) -> str:
-        if score >= high_t:
+    def band_of(row: dict) -> str:
+        if _in_high(row, high_t):
             return "HIGH"
-        if score >= review_t:
+        if row["score"] >= review_t:
             return "REVIEW"
         return "LOW"
 
@@ -196,7 +208,7 @@ def report(rows: list[dict], high_t: float, review_t: float) -> None:
     print("-" * 44)
     per_band: dict[str, Counter] = {}
     for row in rows:
-        bucket = per_band.setdefault(band_of(row["score"]), Counter())
+        bucket = per_band.setdefault(band_of(row), Counter())
         bucket["correct" if row["correct"] else "wrong"] += 1
     for name in ("HIGH", "REVIEW", "LOW"):
         counts = per_band.get(name, Counter())
@@ -212,7 +224,7 @@ def report(rows: list[dict], high_t: float, review_t: float) -> None:
         f"\n{correct_total} of {len(rows)} produced values are correct"
         f" ({correct_total / len(rows):.0%})"
     )
-    doubted = sum(1 for r in rows if r["correct"] and band_of(r["score"]) != "HIGH")
+    doubted = sum(1 for r in rows if r["correct"] and band_of(r) != "HIGH")
     print(f"{doubted} correct values are NOT in HIGH — every one is a false alarm")
 
     # -- does corroboration actually predict correctness? ------------------
@@ -255,7 +267,7 @@ def report(rows: list[dict], high_t: float, review_t: float) -> None:
     print("-" * 54)
     best = None
     for threshold in sorted({round(r["score"], 2) for r in rows}):
-        admitted = [r for r in rows if r["score"] >= threshold]
+        admitted = [r for r in rows if _in_high(r, threshold)]
         right = sum(1 for r in admitted if r["correct"])
         wrong = len(admitted) - right
         precision = right / len(admitted) if admitted else 0.0
@@ -286,10 +298,10 @@ def sweep_agreement(cache: dict[str, dict], high_t: float) -> None:
             patched = {**base, "engine_agreement_bonus": bonus}
             confidence.load_config = lambda p=patched: p
             rows = observe(cache, "both")
-            high = [r for r in rows if r["score"] >= high_t]
+            high = [r for r in rows if _in_high(r, high_t)]
             right = sum(1 for r in high if r["correct"])
             wrong = len(high) - right
-            alarms = sum(1 for r in rows if r["correct"] and r["score"] < high_t)
+            alarms = sum(1 for r in rows if r["correct"] and not _in_high(r, high_t))
             print(f"{bonus:7.2f} {right:13d} {wrong:11d} {alarms:13d}")
     finally:
         confidence.load_config = original

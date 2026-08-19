@@ -498,17 +498,23 @@ def extract_and_score(
         scores[name] = score
         found.add(name)
 
-        # A value only the VLM produced, with nothing from PP-OCRv5 to check it
-        # against. Capped into REVIEW no matter how well it scores — see
-        # confidence.band for the measured reason.
-        vlm_only = (
-            merged_field.engines == (ensemble.SECONDARY,)
-        )
+        # HIGH means two engines read this and read it the same. Anything else
+        # on a two-engine scan — one engine alone, or both disagreeing — is
+        # capped into REVIEW no matter how well it scores. See confidence.band
+        # for the measured reason.
+        #
+        # Guarded on secondary_tokens so a single-engine scan is not capped for
+        # lacking a second opinion it was never going to get.
+        uncorroborated = bool(secondary_tokens) and agreement is not True
 
         fields[name] = ExtractedField(
             value=candidate.normalized.value,
             confidence=score,
-            band=confidence.band(score, uncorroborated_secondary=vlm_only),
+            band=confidence.band(
+                score,
+                uncorroborated=uncorroborated,
+                second_engine_ran=bool(secondary_tokens),
+            ),
             source="DERIVED_RULE" if candidate.strategy == "derived" else "OCR_RULES",
             rawValue=candidate.raw_value,
             displayName=display_name(name),

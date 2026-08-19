@@ -172,6 +172,49 @@ class TestPipelineWiring:
         assert field.value == "2026-07"          # primary wins the field
         assert field.conflict_value == "2027-01"  # the disagreement is recorded
 
+    def test_only_an_agreed_value_can_reach_high(self):
+        """HIGH means both engines read it and read it the same.
+
+        Measured on the 19-image gated corpus: agreed values were 31 of 31
+        correct, contested 4 of 10, and single-engine 16 of 27. Contested
+        measures WORSE than solo -- engines disagree exactly where the print is
+        hard -- so "both engines produced something" is not the rule; "both
+        produced the same thing" is.
+        """
+        from app.models.response_models import ConfidenceBand
+        from app.services.scan_service import extract_and_score
+        from app.services.ocr_service import OcrToken
+
+        label = OcrToken("MFG", 20, 100, 60, 30, 0.99)
+        value = OcrToken("07/2026", 90, 100, 140, 30, 0.99)
+
+        agreed, _ = extract_and_score(
+            [label, value], [OcrToken("MFG 07/2026", 0, 0, 200, 30, 0.0)]
+        )
+        contested, _ = extract_and_score(
+            [label, value], [OcrToken("MFG 01/2027", 0, 0, 200, 30, 0.0)]
+        )
+        solo, _ = extract_and_score([label, value], [OcrToken("x", 0, 0, 10, 10, 0.0)])
+
+        assert agreed["manufacturingDate"].band == ConfidenceBand.HIGH
+        assert contested["manufacturingDate"].band != ConfidenceBand.HIGH
+        assert solo["manufacturingDate"].band != ConfidenceBand.HIGH
+
+    def test_a_single_engine_scan_is_not_capped(self):
+        # The cap answers "two engines ran and did not agree". A PP-OCRv5-only
+        # scan has no second opinion to lack, and capping it would empty the
+        # HIGH band rather than describe it.
+        from app.models.response_models import ConfidenceBand
+        from app.services.scan_service import extract_and_score
+        from app.services.ocr_service import OcrToken
+
+        fields, _ = extract_and_score([
+            OcrToken("MFG", 20, 100, 60, 30, 0.99),
+            OcrToken("07/2026", 90, 100, 140, 30, 0.99),
+        ])
+
+        assert fields["manufacturingDate"].band == ConfidenceBand.HIGH
+
 
 class TestFallbackTrigger:
     """When the slow engine is worth its latency.

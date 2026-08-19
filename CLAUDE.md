@@ -120,13 +120,38 @@ Rules that still apply:
 - It stays **off by default** until the failure profile below is handled.
 - Everything else on the excluded list above stays excluded.
 
-**"A second engine, not a replacement" is now under review.** The VLM alone
-beats the full PP-OCRv5 pipeline by 19 points on core and 24 on codes, which is
-the opposite of what this section assumed. But it does so by never declining:
-4 missed against 29, and it produced this project's first two false accepts.
-That trade is not free under section 24, where a wrong value outranks a missing
-one, so before the VLM can carry a field on its own a VLM-only value must be
-capped into the REVIEW band rather than presented as HIGH.
+**"A second engine, not a replacement" — settled 2026-08-19, and it stays a
+second engine.** The question was whether the VLM, which beats PP-OCRv5 alone
+on both tiers, should simply replace it. Measured on the 19 ground-truthed
+images of the gated corpus, running both and scoring the merged result:
+
+| pipeline | core | codes | core missed | wrong shown as HIGH |
+| --- | --- | --- | --- | --- |
+| PP-OCRv5 + rules | 55% | 47% | 19 | 0 |
+| both engines, merged | **74%** | **71%** | **3** | **0** |
+
+Neither engine alone reaches that. The reason is not that the merge picks the
+better reading — it does not, it keeps the primary for predictability — but
+that **agreement between them is a correctness signal neither can produce on
+its own**:
+
+| | values | correct | wrong | precision |
+| --- | --- | --- | --- | --- |
+| both engines agreed | 31 | 31 | 0 | **100%** |
+| contested | 10 | 4 | 6 | 40% |
+| one engine only | 27 | 16 | 11 | 59% |
+
+Replacing PP-OCRv5 with the VLM would discard that signal entirely and leave
+every value in the 59% column. Under section 24 that is the wrong direction,
+and it is why the VLM does not carry a field alone.
+
+This also settles the F2 cap, and generalizes it. HIGH now means "both engines
+read this and read it the same" — solo values are capped into REVIEW as before,
+and so are contested ones, which measure worse than solo. See
+`app/services/confidence.py`.
+
+**Cost, stated plainly.** 95–160s per scan on the reference laptop against
+PP-OCRv5's 6.1s. That buys 19 core points and takes core misses from 19 to 3.
 
 GPU inference, cloud APIs and any training or fine-tuning remain out of scope.
 
@@ -927,15 +952,43 @@ Keep this logic transparent and easy to tune.
 
 Do not claim that an arbitrary confidence number is a statistically calibrated probability.
 
-Suggested initial UI bands:
+### UI bands — calibrated 2026-08-19, no longer defaults
+
+The bands started as engineering guesses (`>= 0.95 HIGH`, `0.80-0.95 REVIEW`,
+`< 0.80 LOW`). They have now been measured against the gated corpus by
+`scripts/calibrate_confidence.py` and the rule changed shape.
+
+**HIGH is not a score threshold. It is a rule: both engines read the value and
+read it the same.** A score threshold sits underneath it as a floor.
 
 ```text
->= 0.95    HIGH
-0.80-0.95  REVIEW
-< 0.80     LOW / RECAPTURE
+HIGH     two engines agreed, AND score >= 0.75
+REVIEW   score >= 0.50
+LOW      below that / recapture
 ```
 
-These thresholds are initial engineering defaults and must be tuned against real label images.
+Two things forced this:
+
+- **The score cannot separate right from wrong on its own.** The two
+  highest-scoring wrong values in the corpus score 0.869 and 0.783 — above any
+  threshold that admits a useful number of correct values. Agreement excludes
+  both outright.
+- **The old HIGH was unreachable.** With a realistic spatial score of 0.68 a
+  flawless corroborated extraction ceilings at 0.896, so a correct value could
+  not reach 0.92 however good it was. 40 of 51 correct values arrived carrying
+  a warning, and an operator warned four times out of five stops reading
+  warnings at all.
+
+Result: HIGH 31 values 100% correct, REVIEW 15 at 67%, LOW 22 at 45%. The bands
+finally order by correctness, and no wrong value reaches HIGH.
+
+**A scan where only one engine ran keeps a stricter threshold (0.92)**, because
+the agreement rule has nothing to work with there. 0.75 is only safe *because*
+of the rule; applied to a PP-OCRv5-only scan it admits four wrong values into
+HIGH.
+
+Re-run the calibration whenever the corpus grows. 68 values is enough to show
+the shape and not enough to be confident in a third decimal place.
 
 ---
 

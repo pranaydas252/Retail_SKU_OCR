@@ -105,28 +105,61 @@ def score_field(
     return round(max(0.0, min(1.0, score)), 4)
 
 
-def band(score: float, uncorroborated_secondary: bool = False) -> ConfidenceBand:
+def band(
+    score: float,
+    uncorroborated: bool = False,
+    second_engine_ran: bool = True,
+) -> ConfidenceBand:
     """Map a score to its UI treatment band.
 
     Thresholds are tuned against the gated corpus by
     ``scripts/calibrate_confidence.py``; see app/config.py for what the
     measurement said.
 
-    ``uncorroborated_secondary`` marks a value only the vision-language model
-    produced, with nothing from PP-OCRv5 to check it against. Such a value is
-    capped at REVIEW however well it scores.
+    ``uncorroborated`` marks a value that two engines did not agree on, on a
+    scan where both ran. Such a value is capped at REVIEW however well it
+    scores, so HIGH means exactly one thing: both engines read this, and read
+    it the same.
 
-    That cap is not a hedge, it is the measured failure profile. On the 20-image
-    corpus the VLM never declined — 4 missed against PP-OCRv5's 29 — and
-    produced this project's only two false accepts: a fabricated lot code, and
-    a lot code filed under batch. An engine that always answers cannot signal
-    its own uncertainty, so its errors are indistinguishable from its successes,
-    and section 24 ranks a confidently wrong value as the worst outcome here.
-    Corroboration is the only evidence that separates the two, and when it is
-    absent the operator has to be the one who looks.
+    That cap is not a hedge, it is the measured failure profile. Agreement is
+    by a wide margin the strongest predictor of correctness in this pipeline.
+    Measured on the 19-image gated corpus with both engines running:
+
+        both agreed    31 values   31 correct    0 wrong   100%
+        contested      10 values    4 correct    6 wrong    40%
+        one engine     27 values   16 correct   11 wrong    59%
+
+    Agreement also predicts far better than the score does. The two
+    highest-scoring WRONG values in that corpus score 0.869 and 0.783, above
+    any threshold worth setting, and both are uncorroborated — so no threshold
+    can exclude them and this rule excludes both by construction.
+
+    Contested values are capped too, and that is not obvious: two engines both
+    producing a value looks like more evidence than one. It is not. Contested
+    measures WORSE than solo, because engines disagree precisely where the
+    print is hard to read. The screen already treats those fields as open
+    questions — both readings shown, neither preselected — and a HIGH band on
+    a field the UI is asking about would contradict it.
+
+    The cap was originally VLM-only, on the argument that an engine which never
+    declines cannot signal its own uncertainty. That argument was right and is
+    unchanged; it was simply incomplete. PP-OCRv5 alone measures no better, and
+    its solo errors are the confident ones — a 0.9974-confidence price read off
+    the wrong row is not something recognition confidence can catch.
+
+    Inert when only one engine ran: capping every field on a PP-OCRv5-only scan
+    would empty the HIGH band rather than describe it. That path pays for the
+    missing rule with a higher threshold instead — see
+    confidence_high_threshold_single_engine in app/config.py, and note that
+    0.75 is only safe BECAUSE the agreement rule is doing the work.
     """
     settings = get_settings()
-    if score >= settings.confidence_high_threshold and not uncorroborated_secondary:
+    threshold = (
+        settings.confidence_high_threshold
+        if second_engine_ran
+        else settings.confidence_high_threshold_single_engine
+    )
+    if score >= threshold and not uncorroborated:
         return ConfidenceBand.HIGH
     if score >= settings.confidence_review_threshold:
         return ConfidenceBand.REVIEW
