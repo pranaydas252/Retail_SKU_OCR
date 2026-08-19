@@ -175,6 +175,23 @@ _STATUTORY_NUMBER = re.compile(
     re.IGNORECASE,
 )
 
+#: A barcode number printed as text under the symbol.
+#:
+#: GTIN-12, EAN-13 and GTIN-14 are pure digit runs of 12 to 14, and every pack
+#: carries one. Measured: "19080131479436" was adopted as the batch number for
+#: a pack that prints no batch at all, and the vision-language model
+#: independently returned the same pack's EAN for the same field - so both
+#: engines produced a plausible-looking batch and the operator was offered a
+#: choice between two wrong answers.
+#:
+#: A batch code of 12 or more digits with no letter in it does not occur; the
+#: codes in this corpus are 4 to 10 characters and nearly all carry letters.
+#:
+#: The barcode is the SKU's own source (see skuCode in field_aliases.yaml), so
+#: a code field claiming it is always a duplicate of a value the device already
+#: has, never new information.
+_BARCODE_NUMBER = re.compile(r"^\d{12,14}$")
+
 #: A glyph outside Latin-1. The recogniser is multilingual and returns CJK on
 #: dot-matrix print it cannot read - "L三F.F0.359" for a licence code beside a
 #: batch label. normalize_code silently deletes such characters, which turns a
@@ -209,6 +226,12 @@ def _is_plausible(text: str, value_type: str, all_aliases: set[str]) -> bool:
         if _STATUTORY_NUMBER.search(text):
             return False
         if _NON_LATIN.search(text):
+            return False
+        # The barcode number, guarded here and not only in the unlabelled
+        # inference path. A pack whose "B.NO." label has the EAN as its nearest
+        # plausible neighbour reached this gate labelled, not inferred, and the
+        # guard below it never ran.
+        if _BARCODE_NUMBER.match(text.strip()):
             return False
         # A batch or lot code carries at least one digit. Purely alphabetic
         # runs next to a "BATCH" label are prose — statutory text, an address,
@@ -926,19 +949,6 @@ _BARE_PER = re.compile(r"^PER\b", re.IGNORECASE)
 #: as the manufacturing date for a pack marked June 2026. A date printed on a
 #: label does not arrive wrapped in ten letters.
 _DIGITS_AND_SEPARATORS = re.compile(r"^(?=(?:\D*\d){4})[\d/.\-]+$")
-
-#: A barcode number printed as text under the symbol.
-#:
-#: GTIN-12, EAN-13 and GTIN-14 are pure digit runs of 12 to 14, and every pack
-#: carries one. Measured: "19080131479436" was adopted as the batch number for
-#: a pack that prints no batch at all, and the vision-language model
-#: independently returned the same pack's EAN for the same field - so both
-#: engines produced a plausible-looking batch and the operator was offered a
-#: choice between two wrong answers.
-#:
-#: A batch code of 12 or more digits with no letter in it does not occur; the
-#: codes in this corpus are 4 to 10 characters and nearly all carry letters.
-_BARCODE_NUMBER = re.compile(r"^\d{12,14}$")
 
 #: A measured quantity, which is code-shaped and never a code. "100g" passes
 #: the pattern above - four characters, contains a digit - and was adopted as

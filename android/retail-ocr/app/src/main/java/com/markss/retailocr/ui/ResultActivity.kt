@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.gridlayout.widget.GridLayout
 import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import com.markss.retailocr.R
 import com.markss.retailocr.data.ApiClient
@@ -218,6 +219,11 @@ class ResultActivity : AppCompatActivity() {
      *
      * The operator is holding the pack. They can settle in a second what no
      * tie-break rule can settle at all.
+     *
+     * "Neither" needs no button of its own: the field stays editable, so the
+     * operator types what the pack actually says. What that does need is for
+     * the chips to stop claiming otherwise, which is why selection is derived
+     * from the text rather than latched by the tap.
      */
     private fun offerBothReadings(row: ItemFieldBinding, field: ExtractedField) {
         val other = field.conflictValue
@@ -230,21 +236,28 @@ class ResultActivity : AppCompatActivity() {
         row.choicePrimaryValue.text = field.value
         row.choiceSecondaryValue.text = other
 
-        fun select(chosen: String) {
-            row.fieldValue.setText(chosen)
-            val primaryChosen = chosen == field.value
-            styleChip(row, primary = true, selected = primaryChosen)
-            styleChip(row, primary = false, selected = !primaryChosen)
-        }
-
-        // Nothing is preselected. Highlighting the primary would restore
-        // exactly the false certainty this row exists to remove, and the
-        // EditText already holds it, so the operator can also just confirm.
+        // Nothing is preselected, and this runs before the watcher is attached
+        // so setting the field's initial text does not light the primary chip.
+        // Highlighting it would restore exactly the false certainty this row
+        // exists to remove, and the EditText already holds it, so the operator
+        // can also just confirm.
         styleChip(row, primary = true, selected = false)
         styleChip(row, primary = false, selected = false)
 
-        row.choicePrimary.setOnClickListener { select(field.value) }
-        row.choiceSecondary.setOnClickListener { select(other) }
+        // Derived from the current text, never latched by the tap. An operator
+        // who picks a chip and then corrects the value by hand -- both engines
+        // wrong, which is a real outcome on inkjet stamps -- would otherwise be
+        // left with a highlighted chip asserting a reading they had rejected,
+        // and that assertion is what dbo.ContestedFields records as evidence of
+        // which engine to trust.
+        row.fieldValue.doAfterTextChanged { text ->
+            val current = text?.toString()?.trim().orEmpty()
+            styleChip(row, primary = true, selected = current == field.value)
+            styleChip(row, primary = false, selected = current == other)
+        }
+
+        row.choicePrimary.setOnClickListener { row.fieldValue.setText(field.value) }
+        row.choiceSecondary.setOnClickListener { row.fieldValue.setText(other) }
     }
 
     /**

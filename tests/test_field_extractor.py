@@ -847,3 +847,48 @@ class TestSharedDateCensus:
 
         assert fields["manufacturingDate"].normalized.value == "2026-06-27"
         assert fields["expiryDate"].normalized.value == "2026-12-24"
+
+
+class TestBarcodeIsNotACode:
+    """The EAN under the symbol is not a batch or lot code.
+
+    The guard existed only in the unlabelled-stamp inference path. A pack whose
+    code label has the barcode as its nearest plausible neighbour reaches the
+    labelled path instead, where nothing stopped it -- and both engines agree
+    on a barcode, so the operator saw a corroborated wrong answer.
+    """
+
+    def test_a_labelled_batch_does_not_adopt_the_barcode(self):
+        fields = extract_fields([
+            token("BATCH NO", 20, 100, 180),
+            token("8906143891289", 300, 100, 260),
+        ])
+
+        assert "batchNumber" not in fields
+
+    def test_a_labelled_lot_does_not_adopt_the_barcode(self):
+        fields = extract_fields([
+            token("LOT NO", 20, 100, 150),
+            token("19080131479436", 260, 100, 280),
+        ])
+
+        assert "lotCode" not in fields
+
+    def test_a_real_code_still_wins_over_the_barcode(self):
+        fields = extract_fields([
+            token("BATCH NO", 20, 100, 180),
+            token("8906143891289", 300, 100, 260),
+            token("A23C91", 620, 100),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "A23C91"
+
+    def test_a_ten_digit_code_is_still_a_code(self):
+        # The window is 12 to 14 digits. Batch codes in this corpus run 4 to 10
+        # characters, so the guard must not reach down into them.
+        fields = extract_fields([
+            token("BATCH NO", 20, 100, 180),
+            token("1234567890", 300, 100, 200),
+        ])
+
+        assert fields["batchNumber"].normalized.value == "1234567890"
