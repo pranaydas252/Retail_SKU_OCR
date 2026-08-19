@@ -170,7 +170,11 @@ Agreement predicts correctness far better than the score does: the two highest-s
 
 Latency scales with the **number of detected text regions**, not image size: 4.6 s per ROI crop on the reference machine, and a full pack shot is much worse. This is why the app crops to the ROI window before uploading.
 
-Running both engines costs far more than that — 95–160 s per scan on the reference laptop, essentially all of it the VLM on CPU. Set `VLM_TRIGGER=fallback` to trade the accuracy above for speed; the single-engine confidence threshold is separate and stays strict, so the HIGH band remains clean in that mode.
+Running both engines costs far more than that — 95–160 s per scan on the reference laptop, essentially all of it the VLM on CPU.
+
+That cost is accepted. It is a property of the laptop it was measured on, not of the pipeline: the deployment target is a 64-core-class on-premises server, and the accuracy above is a software result that survives the move while the latency is a hardware result that does not. `VLM_TRIGGER=always` is the shipping setting.
+
+`fallback` (run the VLM only when PP-OCRv5 comes up short) and `never` are implemented and measured if a deployment needs them. The single-engine confidence threshold is separate and stays strict, so the HIGH band stays clean in those modes too.
 
 ---
 

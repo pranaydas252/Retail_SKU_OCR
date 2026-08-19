@@ -153,6 +153,17 @@ and so are contested ones, which measure worse than solo. See
 **Cost, stated plainly.** 95–160s per scan on the reference laptop against
 PP-OCRv5's 6.1s. That buys 19 core points and takes core misses from 19 to 3.
 
+**Decision, 2026-08-19: `VLM_TRIGGER=always` stays on, and latency is not a
+reason to revisit it.** The number above is a property of the machine it was
+measured on — a laptop CPU — not of the pipeline. The deployment target is a
+64GB, 16-core on-premises server. Accuracy is a software result and survives
+the move; latency is a hardware result and does not, so trading the first for
+the second on this machine would be optimising the wrong one.
+
+`fallback` and `never` remain implemented and measured, for a deployment that
+turns out to need them. Do not propose switching to them on latency grounds
+again unless the user raises it.
+
 GPU inference, cloud APIs and any training or fine-tuning remain out of scope.
 
 ---
